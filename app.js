@@ -432,11 +432,11 @@ function renderRanking({ selector, groupKey, exclude, selectedValue, titleFor, m
     return;
   }
 
-  const width = groupKey === "origin" ? 720 : 660;
+  const width = 720;
   const rowH = 25;
   const margin = {
     top: 18,
-    right: groupKey === "origin" ? 124 : 74,
+    right: groupKey === "origin" ? 124 : 89,
     bottom: 24,
     left: groupKey === "origin" ? 120 : 155,
   };
