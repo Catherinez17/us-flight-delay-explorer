@@ -391,14 +391,33 @@ function renderRanking({ selector, groupKey, exclude, selectedValue, titleFor, m
   const grouped = groupRows(filteredRows(exclude), (row) => row[INDEX[groupKey]]);
   let entries = [...grouped.entries()].map(([key, metrics]) => ({ key, metrics, value: onTimeRate(metrics) }));
   if (groupKey === "origin") {
-    const ranked = entries
-      .sort((a, b) => b.value - a.value || b.metrics.flights - a.metrics.flights)
-      .map((entry, index) => ({ ...entry, rank: index + 1 }));
+    const sorted = entries.sort(
+      (a, b) => b.value - a.value || b.metrics.flights - a.metrics.flights || a.key.localeCompare(b.key)
+    );
+    const tieCounts = new Map();
+    for (const entry of sorted) {
+      const rateKey = entry.value.toFixed(10);
+      tieCounts.set(rateKey, (tieCounts.get(rateKey) || 0) + 1);
+    }
+    let previousValue = null;
+    let currentRank = 0;
+    const ranked = sorted.map((entry, index) => {
+      if (previousValue === null || Math.abs(entry.value - previousValue) > 1e-9) currentRank = index + 1;
+      previousValue = entry.value;
+      return {
+        ...entry,
+        rank: currentRank,
+        tied: tieCounts.get(entry.value.toFixed(10)) > 1,
+      };
+    });
     if (selectedValue && grouped.has(selectedValue)) {
       const selectedIndex = ranked.findIndex((entry) => entry.key === selectedValue);
+      const selectedEntry = ranked[selectedIndex];
       const start = Math.max(0, Math.min(selectedIndex - Math.floor((maxRows - 1) / 2), ranked.length - maxRows));
       entries = ranked.slice(start, start + maxRows);
-      document.querySelector("#airport-note").textContent = `Selected origin ranks ${selectedIndex + 1} of ${ranked.length}; nearby origins shown`;
+      document.querySelector("#airport-note").textContent = selectedEntry.tied
+        ? `Selected origin is tied #${selectedEntry.rank} among ${ranked.length} origins; nearby origins shown`
+        : `Selected origin ranks #${selectedEntry.rank} among ${ranked.length} origins; nearby origins shown`;
     } else {
       entries = ranked.slice(0, maxRows);
       document.querySelector("#airport-note").textContent = selectedValue
@@ -413,9 +432,9 @@ function renderRanking({ selector, groupKey, exclude, selectedValue, titleFor, m
     return;
   }
 
-  const width = 660;
+  const width = groupKey === "origin" ? 720 : 660;
   const rowH = 25;
-  const margin = { top: 18, right: 74, bottom: 24, left: 155 };
+  const margin = { top: 18, right: groupKey === "origin" ? 134 : 74, bottom: 24, left: 155 };
   const height = margin.top + margin.bottom + entries.length * rowH;
   const innerW = width - margin.left - margin.right;
   const min = Math.max(0, Math.floor(Math.min(...entries.map((entry) => entry.value)) / 5) * 5 - 5);
@@ -428,11 +447,15 @@ function renderRanking({ selector, groupKey, exclude, selectedValue, titleFor, m
       ${entries.map((entry, index) => {
         const y = margin.top + index * rowH;
         const selected = selectedValue === entry.key;
-        const rowTitle = entry.rank ? `${entry.rank}. ${titleFor(entry.key)}` : titleFor(entry.key);
-        return `<g class="chart-target" tabindex="0" role="button" aria-label="${escapeHtml(titleFor(entry.key))}: ${entry.value.toFixed(1)} percent on time" data-key="${escapeHtml(entry.key)}" data-index="${index}">
+        const smallSample = groupKey === "origin" && entry.metrics.flights < 10;
+        const rankLabel = entry.rank ? (entry.tied ? `Tied #${entry.rank} · ` : `#${entry.rank} · `) : "";
+        const rowTitle = `${rankLabel}${titleFor(entry.key)}`;
+        const rankDescription = entry.rank ? `${entry.tied ? "tied rank" : "rank"} ${entry.rank}; ` : "";
+        const sampleDescription = smallSample ? "; small sample, fewer than 10 reported flights" : "";
+        return `<g class="chart-target" tabindex="0" role="button" aria-label="${escapeHtml(titleFor(entry.key))}: ${rankDescription}${entry.value.toFixed(1)} percent on time${sampleDescription}" data-key="${escapeHtml(entry.key)}" data-index="${index}">
           <text x="${margin.left - 10}" y="${y + 13}" text-anchor="end" font-weight="${selected ? 800 : 600}" fill="${selected ? "#8d4109" : "#43576b"}">${escapeHtml(rowTitle)}</text>
           <rect class="${selected ? "selected-mark" : ""}" x="${margin.left}" y="${y + 2}" width="${Math.max(1, scale(entry.value))}" height="15" rx="4" fill="${selected ? "#fff0e3" : "#2f80c9"}"></rect>
-          <text x="${margin.left + scale(entry.value) + 8}" y="${y + 14}" font-weight="700">${entry.value.toFixed(1)}%</text>
+          <text x="${margin.left + scale(entry.value) + 8}" y="${y + 14}" font-weight="700">${entry.value.toFixed(1)}%${smallSample ? '<tspan fill="#6b7d90" font-size="9.5" font-weight="600"> · small sample</tspan>' : ""}</text>
         </g>`;
       }).join("")}
       <text x="${margin.left}" y="${height - 4}">${min}%</text>
@@ -445,9 +468,11 @@ function renderRanking({ selector, groupKey, exclude, selectedValue, titleFor, m
     ({ index }) => {
       const entry = entries[Number(index)];
       const averageDelay = entry.metrics.delayed15 ? entry.metrics.delayedArrivalDelayMinutes / entry.metrics.delayed15 : 0;
+      const lines = [`${entry.value.toFixed(1)}% on time`, `${numberFormat.format(entry.metrics.flights)} reported flights`, `${averageDelay.toFixed(1)} avg delay min among delayed arrivals`];
+      if (groupKey === "origin" && entry.metrics.flights < 10) lines.push("Small sample: fewer than 10 reported flights");
       return {
         title: titleFor(entry.key),
-        lines: [`${entry.value.toFixed(1)}% on time`, `${numberFormat.format(entry.metrics.flights)} reported flights`, `${averageDelay.toFixed(1)} avg delay min among delayed arrivals`],
+        lines,
       };
     }
   );
