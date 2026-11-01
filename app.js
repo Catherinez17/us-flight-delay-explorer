@@ -448,7 +448,7 @@ function renderRanking({ selector, groupKey, exclude, selectedValue, titleFor, m
 
   const width = 720;
   const rowH = 27;
-  const margin = { top: 18, right: groupKey === "origin" ? 128 : 89, bottom: 24, left: 155 };
+  const margin = { top: 18, right: groupKey === "origin" ? 155 : 89, bottom: 24, left: 155 };
   const height = margin.top + margin.bottom + entries.length * rowH;
   const innerW = width - margin.left - margin.right;
   const min = Math.max(0, Math.floor(Math.min(...entries.map((entry) => entry.value)) / 5) * 5 - 5);
