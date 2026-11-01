@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Explore how airline, airport, date, and departure time shaped U.S. flight delays in July 2026."
+    />
+    <title>U.S. Flight Delay Explorer</title>
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b1f33'/%3E%3Cpath d='M11 36h16l13 15h7l-7-15h12c4 0 7-2 7-5s-3-5-7-5H40l7-14h-7L27 26H11l5-8h-6L3 31l7 13h6z' fill='%2358a6ff'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#dashboard">Skip to dashboard</a>
+    <div id="loading" class="loading-screen" role="status">
+      <div class="loading-mark" aria-hidden="true"></div>
+      <p>Preparing July 2026 flight records…</p>
+    </div>
+
+    <main id="app" hidden>
+      <header class="masthead">
+        <div>
+          <p class="eyebrow">BTS · Reporting Carrier On-Time Performance</p>
+          <h1>U.S. Flight Delay Explorer</h1>
+        </div>
+        <div class="source-note">
+          <span class="status-dot" aria-hidden="true"></span>
+          <div>
+            <span id="period-label">July 2026</span>
+          </div>
+        </div>
+      </header>
+
+      <section class="filter-panel" aria-label="Dashboard filters">
+        <div class="filter-heading">
+          <div>
+            <p class="panel-kicker">Filters</p>
+          </div>
+          <div class="filter-actions">
+            <div id="filter-chips" class="filter-chips" aria-live="polite"></div>
+            <button id="reset-button" class="reset-button" type="button" disabled>
+              Reset all
+            </button>
+          </div>
+        </div>
+        <div class="filter-controls">
+          <label>
+            <span>Carrier <small id="carrier-count"></small></span>
+            <select id="airline-filter" data-filter="airline" aria-label="Filter by carrier"></select>
+          </label>
+          <label>
+            <span>Origin <small id="origin-count"></small></span>
+            <input id="origin-filter" type="search" list="origin-options" placeholder="All origins" aria-label="Search or select an origin airport" autocomplete="off" />
+            <datalist id="origin-options"></datalist>
+          </label>
+          <label>
+            <span>Weekday</span>
+            <select id="weekday-filter" data-filter="dayOfWeek" aria-label="Filter by weekday"></select>
+          </label>
+          <label>
+            <span>Departure time</span>
+            <select id="window-filter" data-filter="departureWindow" aria-label="Filter by scheduled departure time"></select>
+          </label>
+        </div>
+      </section>
+
+      <section class="kpi-grid" aria-label="Current selection summary">
+        <article class="kpi-card">
+          <span>Reported flights</span>
+          <strong id="kpi-flights">—</strong>
+          <small id="kpi-scope">Current selection</small>
+        </article>
+        <article class="kpi-card">
+          <span>On-time arrival rate</span>
+          <strong id="kpi-ontime">—</strong>
+          <small>Arrived less than 15 min late</small>
+        </article>
+        <article class="kpi-card">
+          <span>Cancellation rate</span>
+          <strong id="kpi-cancel">—</strong>
+          <small>Share of reported flights</small>
+        </article>
+        <article class="kpi-card">
+          <span>Average delay</span>
+          <strong><span id="kpi-delay">—</span><span class="kpi-unit"> min</span></strong>
+          <small>Among arrivals delayed at least 15 min</small>
+        </article>
+      </section>
+
+      <section id="dashboard" class="dashboard-grid">
+        <article class="panel timeline-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="panel-kicker">View 1 · Temporal pattern</p>
+              <h2>Daily on-time arrival rate</h2>
+            </div>
+            <div class="panel-meta">
+              <p id="timeline-scope" class="scope-line"></p>
+            </div>
+          </div>
+          <div id="timeline-chart" class="chart" aria-live="polite"></div>
+        </article>
+
+        <article class="panel carrier-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="panel-kicker">View 2 · Carrier comparison</p>
+              <h2>On-time rate by carrier</h2>
+            </div>
+            <div class="panel-meta">
+              <p id="carrier-scope" class="scope-line"></p>
+            </div>
+          </div>
+          <div id="airline-chart" class="chart ranking-chart"></div>
+        </article>
+
+        <article class="panel airport-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="panel-kicker">View 3 · Origin comparison</p>
+              <h2>On-time rate by airport</h2>
+            </div>
+            <div class="panel-meta">
+              <p id="airport-scope" class="scope-line"></p>
+              <p id="airport-note">Origins ranked by on-time rate</p>
+            </div>
+          </div>
+          <div id="airport-chart" class="chart ranking-chart"></div>
+        </article>
+
+        <article class="panel heatmap-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="panel-kicker">View 4 · Ordered time blocks</p>
+              <h2>Delay rate by weekday and departure window</h2>
+            </div>
+            <div class="panel-meta">
+              <p id="heatmap-scope" class="scope-line"></p>
+            </div>
+          </div>
+          <div id="heatmap-chart" class="chart heatmap-chart"></div>
+          <div class="heat-legend" aria-label="Delay rate legend">
+            <span>Lower delay rate</span>
+            <span class="heat-gradient" aria-hidden="true"></span>
+            <span>Higher delay rate</span>
+          </div>
+        </article>
+
+        <article class="panel cause-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="panel-kicker">Supporting view · Delay attribution</p>
+              <h2>Reported delay-cause minutes</h2>
+            </div>
+            <div class="panel-meta">
+              <p id="cause-scope" class="scope-line"></p>
+            </div>
+          </div>
+          <div id="cause-chart" class="cause-chart"></div>
+        </article>
+      </section>
+
+      <section class="method-grid" aria-label="Data and definitions">
+        <article>
+          <p class="panel-kicker">Data and definitions</p>
+          <p id="method-copy"></p>
+          <a id="source-link" href="#" target="_blank" rel="noreferrer">Open official BTS source</a>
+        </article>
+      </section>
+    </main>
+
+    <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
+    <script src="app.js"></script>
+  </body>
+</html>
