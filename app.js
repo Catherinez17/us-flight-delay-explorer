@@ -27,11 +27,11 @@ const INDEX = {
 
 const DAYS = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const CAUSES = [
-  ["Carrier", "carrierDelayMinutes", "carrierDelayFlights"],
-  ["Late aircraft", "lateAircraftDelayMinutes", "lateAircraftDelayFlights"],
-  ["National aviation system", "nasDelayMinutes", "nasDelayFlights"],
-  ["Weather", "weatherDelayMinutes", "weatherDelayFlights"],
-  ["Security", "securityDelayMinutes", "securityDelayFlights"],
+  ["Carrier", "carrierDelayMinutes", "carrierDelayFlights", "Within the airline's control, such as maintenance, crew, cleaning, baggage loading, or fueling."],
+  ["Late aircraft", "lateAircraftDelayMinutes", "lateAircraftDelayFlights", "The aircraft used for this flight arrived late from its previous flight."],
+  ["National aviation system", "nasDelayMinutes", "nasDelayFlights", "Airport operations, heavy traffic, air traffic control, or non-extreme weather conditions."],
+  ["Weather", "weatherDelayMinutes", "weatherDelayFlights", "Extreme weather that delays or prevents safe flight operations."],
+  ["Security", "securityDelayMinutes", "securityDelayFlights", "Security-related disruption, such as a breach, terminal evacuation, screening failure, or unusually long screening lines."],
 ];
 
 const FILTER_NAMES = {
@@ -516,8 +516,8 @@ function renderHeatmap() {
   const min = values.length ? Math.min(...values) : 0;
   const max = values.length ? Math.max(...values) : 1;
   const width = 760;
-  const height = 286;
-  const margin = { top: 40, right: 18, bottom: 44, left: 70 };
+  const height = 254;
+  const margin = { top: 40, right: 18, bottom: 12, left: 70 };
   const cellW = (width - margin.left - margin.right) / Math.max(1, windows.length);
   const cellH = (height - margin.top - margin.bottom) / 7;
 
@@ -543,7 +543,6 @@ function renderHeatmap() {
         const muted = mutedDay || mutedWindow;
         return `<rect class="chart-target ${selected ? "selected-mark" : ""} ${muted ? "muted-heat-cell" : ""}" tabindex="0" role="button" aria-label="${DAYS[cell.day]}, ${escapeHtml(windowLabel(cell.window))}: ${cell.value.toFixed(1)} percent delayed" data-day="${cell.day}" data-window="${escapeHtml(cell.window)}" data-value="${cell.value.toFixed(2)}" data-flights="${cell.metrics.flights}" x="${x + 2}" y="${y + 2}" width="${Math.max(1, cellW - 4)}" height="${Math.max(1, cellH - 4)}" rx="4" fill="${muted ? "#edf1f5" : heatColor(cell.value, min, max)}"></rect>`;
       }).join("")}
-      <text x="${margin.left + (width - margin.left - margin.right) / 2}" y="${height - 8}" text-anchor="middle">Scheduled departure time (local)</text>
     </svg>`;
 
   bindTargets(
@@ -565,10 +564,11 @@ function renderHeatmap() {
 function renderCauses() {
   const container = document.querySelector("#cause-chart");
   const metrics = summarize(filteredRows());
-  const values = CAUSES.map(([label, minutesKey, flightsKey]) => ({
+  const values = CAUSES.map(([label, minutesKey, flightsKey, description]) => ({
     label,
     value: metrics[minutesKey],
     flights: metrics[flightsKey],
+    description,
   }));
   const total = values.reduce((sum, item) => sum + item.value, 0);
   const max = Math.max(1, ...values.map((item) => item.value));
@@ -590,6 +590,7 @@ function renderCauses() {
     return {
       title: item.label,
       lines: [
+        `Meaning: ${item.description}`,
         affectedFlightsLabel(item.flights),
         `${numberFormat.format(Math.round(item.value))} attributed delay minutes`,
         `${share.toFixed(1)}% of reported delay-cause minutes`,

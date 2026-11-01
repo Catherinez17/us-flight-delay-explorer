@@ -463,6 +463,7 @@ h1 {
   min-height: 0;
   margin: auto 0;
   padding: 0;
+  transform: translateY(-0.65rem);
 }
 
 .cause-row {
@@ -499,9 +500,8 @@ h1 {
 }
 
 .heatmap-chart {
-  min-height: 250px;
+  min-height: 224px;
   overflow-x: hidden;
-  padding-bottom: 0.25rem;
 }
 
 .heatmap-chart svg {
@@ -509,13 +509,22 @@ h1 {
   width: 100%;
 }
 
+.heat-footer,
 .heat-legend {
   display: flex;
-  justify-content: flex-end;
   align-items: center;
-  gap: 0.6rem;
+}
+
+.heat-footer {
+  justify-content: space-between;
+  gap: 1rem;
   color: var(--ink-soft);
   font-size: 0.78rem;
+}
+
+.heat-legend {
+  justify-content: flex-end;
+  gap: 0.6rem;
 }
 
 .heat-gradient {
