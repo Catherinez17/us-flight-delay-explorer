@@ -447,7 +447,7 @@ function renderRanking({ selector, groupKey, exclude, selectedValue, titleFor, m
   }
 
   const width = 720;
-  const rowH = 25;
+  const rowH = 27;
   const margin = { top: 18, right: 89, bottom: 24, left: 155 };
   const height = margin.top + margin.bottom + entries.length * rowH;
   const innerW = width - margin.left - margin.right;
@@ -467,9 +467,9 @@ function renderRanking({ selector, groupKey, exclude, selectedValue, titleFor, m
         const rankDescription = entry.rank ? `${entry.tied ? "tied rank" : "rank"} ${entry.rank}; ` : "";
         const sampleDescription = smallSample ? "; small sample, fewer than 10 reported flights" : "";
         return `<g class="chart-target" tabindex="0" role="button" aria-label="${escapeHtml(titleFor(entry.key))}: ${rankDescription}${entry.value.toFixed(1)} percent on time${sampleDescription}" data-key="${escapeHtml(entry.key)}" data-index="${index}">
-          <text x="${margin.left - 10}" y="${y + 13}" text-anchor="end" font-weight="${selected ? 800 : 600}" fill="${selected ? "#8d4109" : "#43576b"}">${escapeHtml(rowTitle)}</text>
-          <rect class="${selected ? "selected-mark" : ""}" x="${margin.left}" y="${y + 2}" width="${Math.max(1, scale(entry.value))}" height="15" rx="4" fill="${selected ? "#fff0e3" : "#2f80c9"}"></rect>
-          <text x="${margin.left + scale(entry.value) + 8}" y="${y + 14}" font-weight="700">${entry.value.toFixed(1)}%${smallSample ? '<tspan fill="#6b7d90" font-size="9.5" font-weight="600"> · small sample</tspan>' : ""}</text>
+          <text x="${margin.left - 10}" y="${y + 15}" text-anchor="end" font-weight="${selected ? 800 : 600}" fill="${selected ? "#8d4109" : "#43576b"}">${escapeHtml(rowTitle)}</text>
+          <rect class="${selected ? "selected-mark" : ""}" x="${margin.left}" y="${y + 2}" width="${Math.max(1, scale(entry.value))}" height="16" rx="4" fill="${selected ? "#fff0e3" : "#2f80c9"}"></rect>
+          <text x="${margin.left + scale(entry.value) + 8}" y="${y + 15}" font-weight="700">${entry.value.toFixed(1)}%${smallSample ? '<tspan fill="#6b7d90" font-size="10.2" font-weight="600"> · small sample</tspan>' : ""}</text>
         </g>`;
       }).join("")}
       <text x="${margin.left}" y="${height - 4}">${min}%</text>
@@ -517,7 +517,7 @@ function renderHeatmap() {
   const max = values.length ? Math.max(...values) : 1;
   const width = 760;
   const height = 286;
-  const margin = { top: 40, right: 8, bottom: 44, left: 70 };
+  const margin = { top: 40, right: 18, bottom: 44, left: 70 };
   const cellW = (width - margin.left - margin.right) / Math.max(1, windows.length);
   const cellH = (height - margin.top - margin.bottom) / 7;
 
