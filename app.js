@@ -17,16 +17,21 @@ const INDEX = {
   nasDelayMinutes: 13,
   securityDelayMinutes: 14,
   lateAircraftDelayMinutes: 15,
-  distanceMiles: 16,
+  carrierDelayFlights: 16,
+  weatherDelayFlights: 17,
+  nasDelayFlights: 18,
+  securityDelayFlights: 19,
+  lateAircraftDelayFlights: 20,
+  distanceMiles: 21,
 };
 
 const DAYS = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const CAUSES = [
-  ["Carrier", "carrierDelayMinutes"],
-  ["Late aircraft", "lateAircraftDelayMinutes"],
-  ["National aviation system", "nasDelayMinutes"],
-  ["Weather", "weatherDelayMinutes"],
-  ["Security", "securityDelayMinutes"],
+  ["Carrier", "carrierDelayMinutes", "carrierDelayFlights"],
+  ["Late aircraft", "lateAircraftDelayMinutes", "lateAircraftDelayFlights"],
+  ["National aviation system", "nasDelayMinutes", "nasDelayFlights"],
+  ["Weather", "weatherDelayMinutes", "weatherDelayFlights"],
+  ["Security", "securityDelayMinutes", "securityDelayFlights"],
 ];
 
 const FILTER_NAMES = {
@@ -50,6 +55,10 @@ const state = {
 const numberFormat = new Intl.NumberFormat("en-US");
 const compactFormat = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
 const dateFormat = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+
+function affectedFlightsLabel(value) {
+  return `${numberFormat.format(value)} affected ${value === 1 ? "flight" : "flights"}`;
+}
 
 function escapeHtml(value) {
   return String(value)
@@ -81,6 +90,11 @@ function emptyMetrics() {
     nasDelayMinutes: 0,
     securityDelayMinutes: 0,
     lateAircraftDelayMinutes: 0,
+    carrierDelayFlights: 0,
+    weatherDelayFlights: 0,
+    nasDelayFlights: 0,
+    securityDelayFlights: 0,
+    lateAircraftDelayFlights: 0,
     distanceMiles: 0,
   };
 }
@@ -434,12 +448,7 @@ function renderRanking({ selector, groupKey, exclude, selectedValue, titleFor, m
 
   const width = 720;
   const rowH = 25;
-  const margin = {
-    top: 18,
-    right: groupKey === "origin" ? 124 : 89,
-    bottom: 24,
-    left: groupKey === "origin" ? 120 : 155,
-  };
+  const margin = { top: 18, right: 89, bottom: 24, left: 155 };
   const height = margin.top + margin.bottom + entries.length * rowH;
   const innerW = width - margin.left - margin.right;
   const min = Math.max(0, Math.floor(Math.min(...entries.map((entry) => entry.value)) / 5) * 5 - 5);
@@ -554,18 +563,39 @@ function renderHeatmap() {
 }
 
 function renderCauses() {
+  const container = document.querySelector("#cause-chart");
   const metrics = summarize(filteredRows());
-  const values = CAUSES.map(([label, key]) => ({ label, value: metrics[key] }));
+  const values = CAUSES.map(([label, minutesKey, flightsKey]) => ({
+    label,
+    value: metrics[minutesKey],
+    flights: metrics[flightsKey],
+  }));
   const total = values.reduce((sum, item) => sum + item.value, 0);
   const max = Math.max(1, ...values.map((item) => item.value));
-  document.querySelector("#cause-chart").innerHTML = values.map((item) => `
-    <div class="cause-row">
+  container.innerHTML = values.map((item, index) => {
+    const share = total ? (100 * item.value) / total : 0;
+    return `
+    <div class="cause-row chart-target data-only-mark" tabindex="0" role="img" data-index="${index}" aria-label="${escapeHtml(item.label)}: ${affectedFlightsLabel(item.flights)}, ${numberFormat.format(Math.round(item.value))} attributed delay minutes, ${share.toFixed(1)} percent of reported delay-cause minutes">
       <span>${escapeHtml(item.label)}</span>
-      <div class="cause-track" role="img" aria-label="${escapeHtml(item.label)}: ${numberFormat.format(Math.round(item.value))} minutes, ${total ? ((100 * item.value) / total).toFixed(1) : "0.0"} percent of reported cause minutes">
+      <div class="cause-track" aria-hidden="true">
         <div class="cause-fill" style="width:${(100 * item.value) / max}%"></div>
       </div>
-      <strong class="cause-value">${compactFormat.format(Math.round(item.value))} min · ${total ? ((100 * item.value) / total).toFixed(1) : "0.0"}%</strong>
-    </div>`).join("");
+      <strong class="cause-value">${compactFormat.format(Math.round(item.value))} min · ${share.toFixed(1)}%</strong>
+    </div>`;
+  }).join("");
+
+  bindTargets(container, null, ({ index }) => {
+    const item = values[Number(index)];
+    const share = total ? (100 * item.value) / total : 0;
+    return {
+      title: item.label,
+      lines: [
+        affectedFlightsLabel(item.flights),
+        `${numberFormat.format(Math.round(item.value))} attributed delay minutes`,
+        `${share.toFixed(1)}% of reported delay-cause minutes`,
+      ],
+    };
+  });
 }
 
 function renderAll() {
@@ -644,12 +674,12 @@ function registerWebMcp() {
 
 async function init() {
   try {
-    const response = await fetch("data.json");
+    const response = await fetch("data.json?v=20261101-cause-counts");
     if (!response.ok) throw new Error(`Data request failed: ${response.status}`);
     state.data = await response.json();
     document.querySelector("#period-label").textContent = state.data.meta.period;
     document.querySelector("#source-link").href = state.data.meta.sourceUrl;
-    document.querySelector("#method-copy").textContent = `${numberFormat.format(state.data.meta.reportedFlights)} BTS-reported flights from ${state.data.meta.reportingCarrierCount} carriers and ${state.data.meta.originCount} origins. On time means arriving less than 15 minutes late; average delay covers arrivals delayed at least 15 minutes. Departure windows use scheduled local time.`;
+    document.querySelector("#method-copy").textContent = `${numberFormat.format(state.data.meta.reportedFlights)} BTS-reported flights from ${state.data.meta.reportingCarrierCount} carriers and ${state.data.meta.originCount} origins. On time means arriving less than 15 minutes late; average delay covers arrivals delayed at least 15 minutes. Affected flights have more than zero minutes recorded for a cause; one flight may appear under multiple causes. Departure windows use scheduled local time.`;
     document.querySelector("#reset-button").addEventListener("click", resetFilters);
     initializeFilterControls();
     document.querySelector("#loading").remove();
