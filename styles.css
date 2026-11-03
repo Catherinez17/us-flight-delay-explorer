@@ -615,6 +615,10 @@ h1 {
     width: min(100% - 24px, 760px);
   }
 
+  .dashboard-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .masthead {
     align-items: flex-start;
     flex-direction: column;
@@ -634,7 +638,7 @@ h1 {
   .airport-panel,
   .heatmap-panel,
   .cause-panel {
-    grid-column: auto;
+    grid-column: 1;
   }
 
   .filter-controls {
@@ -647,6 +651,19 @@ h1 {
 }
 
 @media (max-width: 560px) {
+  main {
+    width: calc(100% - 16px);
+    padding-top: 0.4rem;
+  }
+
+  .masthead {
+    gap: 0.7rem;
+  }
+
+  h1 {
+    font-size: 1.75rem;
+  }
+
   .filter-heading {
     display: grid;
   }
@@ -665,7 +682,11 @@ h1 {
   }
 
   .kpi-card {
-    min-height: 128px;
+    min-height: 112px;
+  }
+
+  .panel {
+    padding: 0.65rem;
   }
 
   .panel-heading {
@@ -679,6 +700,57 @@ h1 {
 
   .filter-controls {
     grid-template-columns: 1fr;
+  }
+
+  #timeline-chart,
+  .ranking-chart,
+  .heatmap-chart {
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #timeline-chart svg,
+  .ranking-chart svg {
+    width: 680px;
+    min-width: 680px;
+  }
+
+  .heatmap-chart svg {
+    width: 720px;
+    min-width: 720px;
+  }
+
+  .heat-footer {
+    flex-wrap: wrap;
+    gap: 0.35rem 0.75rem;
+  }
+
+  .heat-gradient {
+    width: 92px;
+  }
+
+  .cause-chart {
+    flex-basis: 210px;
+    transform: none;
+  }
+
+  .cause-row {
+    grid-template-columns: minmax(78px, 0.8fr) minmax(82px, 1.5fr) minmax(78px, auto);
+    gap: 0.35rem;
+  }
+
+  .cause-row span,
+  .cause-row strong {
+    font-size: 0.72rem;
+  }
+
+  .cause-track {
+    height: 14px;
+  }
+
+  .cause-value {
+    min-width: 76px;
   }
 }
 
