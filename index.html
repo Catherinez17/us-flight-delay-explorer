@@ -13,7 +13,7 @@
       type="image/svg+xml"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b1f33'/%3E%3Cpath d='M11 36h16l13 15h7l-7-15h12c4 0 7-2 7-5s-3-5-7-5H40l7-14h-7L27 26H11l5-8h-6L3 31l7 13h6z' fill='%2358a6ff'/%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=20261123-method-small" />
   </head>
   <body>
     <a class="skip-link" href="#dashboard">Skip to dashboard</a>
@@ -114,9 +114,11 @@
             </div>
             <div class="panel-meta">
               <p id="carrier-scope" class="scope-line"></p>
+              <p id="carrier-note" hidden></p>
             </div>
           </div>
           <div id="airline-chart" class="chart ranking-chart"></div>
+          <p id="carrier-rule" class="ranking-rule">Ranking minimum: 20 reported flights</p>
         </article>
 
         <article class="panel airport-panel">
@@ -131,6 +133,7 @@
             </div>
           </div>
           <div id="airport-chart" class="chart ranking-chart"></div>
+          <p id="airport-rule" class="ranking-rule">Ranking minimum: 20 reported flights</p>
         </article>
 
         <article class="panel heatmap-panel">
@@ -145,7 +148,6 @@
           </div>
           <div id="heatmap-chart" class="chart heatmap-chart"></div>
           <div class="heat-footer">
-            <span class="heat-axis-label">Scheduled departure time (local)</span>
             <div class="heat-legend" aria-label="Delay rate legend">
               <span>Lower delay rate</span>
               <span class="heat-gradient" aria-hidden="true"></span>
@@ -165,19 +167,20 @@
             </div>
           </div>
           <div id="cause-chart" class="cause-chart"></div>
+          <p class="cause-note">Cause categories may overlap.</p>
         </article>
       </section>
 
       <section class="method-grid" aria-label="Data and definitions">
         <article>
           <p class="panel-kicker">Data and definitions</p>
-          <p id="method-copy"></p>
+          <div id="method-copy" class="method-copy"></div>
           <a id="source-link" href="#" target="_blank" rel="noreferrer">Open official BTS source</a>
         </article>
       </section>
     </main>
 
     <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
-    <script src="app.js"></script>
+    <script src="app.js?v=20261123-equal-ranking-width"></script>
   </body>
 </html>

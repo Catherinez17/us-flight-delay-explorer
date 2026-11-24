@@ -348,6 +348,8 @@ h1 {
 .carrier-panel,
 .airport-panel {
   grid-column: span 10;
+  display: flex;
+  flex-direction: column;
 }
 
 .heatmap-panel {
@@ -377,15 +379,30 @@ h1 {
 
 .panel-meta,
 .panel-footnote {
-  max-width: 22rem;
   margin: 0;
   color: var(--ink-soft);
   font-size: 0.7rem;
   text-align: right;
 }
 
+.panel-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 68%;
+}
+
 .panel-meta p {
   margin: 0;
+  white-space: nowrap;
+}
+
+.cause-panel .panel-meta {
+  font-size: 0.68rem;
+}
+
+.carrier-panel .panel-meta,
+.airport-panel .panel-meta {
+  font-size: 0.68rem;
 }
 
 .scope-line {
@@ -399,6 +416,13 @@ h1 {
 
 .panel-meta p + p {
   margin-top: 0.2rem;
+}
+
+.ranking-rule {
+  margin: -0.15rem 0 0;
+  color: #718295;
+  font-size: 0.65rem;
+  text-align: right;
 }
 
 .chart {
@@ -428,6 +452,26 @@ h1 {
   stroke-dasharray: 3 4;
 }
 
+.reference-line {
+  stroke: #71859a;
+  stroke-width: 1.5px;
+  stroke-dasharray: 6 4;
+}
+
+.chart .reference-label {
+  fill: #5f7387;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.timeline-panel .chart text {
+  font-size: 12px;
+}
+
+.timeline-panel .chart .reference-label {
+  font-size: 10px;
+}
+
 .chart-target {
   cursor: pointer;
 }
@@ -446,12 +490,34 @@ h1 {
   stroke-width: 3px;
 }
 
+.brush-preview {
+  opacity: 1 !important;
+  stroke: var(--orange);
+  stroke-width: 3px;
+}
+
 .ranking-chart {
   min-height: 338px;
 }
 
 .ranking-chart text {
-  font-size: 12px;
+  font-size: 13px;
+}
+
+.dot-row-guide {
+  stroke: #e3eaf1;
+  stroke-width: 2px;
+  stroke-linecap: round;
+}
+
+.ranking-dot {
+  stroke: white;
+  stroke-width: 2px;
+}
+
+.selected-dot {
+  stroke: var(--orange);
+  stroke-width: 3px;
 }
 
 .cause-chart {
@@ -473,6 +539,16 @@ h1 {
   gap: 0.45rem;
 }
 
+.cause-row > span:first-child,
+.cause-track {
+  position: relative;
+  left: 0.6rem;
+}
+
+.cause-track {
+  width: calc(100% - 0.6rem);
+}
+
 .cause-row span,
 .cause-row strong {
   font-size: 0.8rem;
@@ -492,10 +568,29 @@ h1 {
 }
 
 .cause-value {
-  min-width: 92px;
+  display: grid;
+  min-width: 138px;
   color: var(--ink-soft);
+  text-align: right;
+}
+
+.cause-value strong {
   font-size: 0.72rem;
   font-weight: 800;
+  line-height: 1.15;
+}
+
+.cause-value small {
+  color: #6f8192;
+  font-size: 0.62rem;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.cause-note {
+  margin: -0.25rem 0 0;
+  color: #6f8192;
+  font-size: 0.62rem;
   text-align: right;
 }
 
@@ -509,6 +604,12 @@ h1 {
   width: 100%;
 }
 
+.heat-axis-title {
+  fill: #607386;
+  font-size: 10.5px;
+  font-weight: 650;
+}
+
 .heat-footer,
 .heat-legend {
   display: flex;
@@ -516,7 +617,7 @@ h1 {
 }
 
 .heat-footer {
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 1rem;
   color: var(--ink-soft);
   font-size: 0.78rem;
@@ -525,9 +626,16 @@ h1 {
 .heat-legend {
   justify-content: flex-end;
   gap: 0.6rem;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.heat-legend > span {
+  white-space: nowrap;
 }
 
 .heat-gradient {
+  flex: 0 0 130px;
   width: 130px;
   height: 10px;
   border-radius: 99px;
@@ -553,6 +661,20 @@ h1 {
   font-size: 0.9rem;
 }
 
+.method-copy {
+  display: grid;
+  gap: 0.32rem;
+}
+
+.method-copy p {
+  font-size: 0.82rem;
+}
+
+.method-copy strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+
 .method-grid ol {
   padding-left: 1.25rem;
 }
@@ -565,11 +687,12 @@ h1 {
   display: inline-block;
   margin-top: 0.45rem;
   color: var(--blue);
+  font-size: 0.82rem;
   font-weight: 700;
 }
 
 .muted-heat-cell {
-  opacity: 0.72;
+  opacity: 0.48;
 }
 
 .tooltip {
@@ -594,6 +717,36 @@ h1 {
 
 .tooltip span {
   color: #c4d6e7;
+}
+
+.tooltip-title {
+  font-size: 0.9rem;
+  line-height: 1.25;
+}
+
+.tooltip-meaning {
+  margin-top: 0.45rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid rgba(196, 214, 231, 0.22);
+}
+
+.tooltip .tooltip-section-label {
+  margin-bottom: 0.15rem;
+  color: #78b7e9;
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tooltip-lines {
+  display: grid;
+  gap: 0.08rem;
+  margin-top: 0.5rem;
+}
+
+.tooltip-title + .tooltip-lines {
+  margin-top: 0.35rem;
 }
 
 .error-state {
@@ -694,8 +847,13 @@ h1 {
   }
 
   .panel-meta {
+    max-width: none;
     margin-top: 0.35rem;
     text-align: left;
+  }
+
+  .panel-meta p {
+    white-space: normal;
   }
 
   .filter-controls {
@@ -727,6 +885,7 @@ h1 {
   }
 
   .heat-gradient {
+    flex-basis: 92px;
     width: 92px;
   }
 
@@ -747,10 +906,25 @@ h1 {
 
   .cause-track {
     height: 14px;
+    left: 0;
+    width: 100%;
+  }
+
+  .cause-row > span:first-child {
+    left: 0;
   }
 
   .cause-value {
-    min-width: 76px;
+    min-width: 112px;
+  }
+
+  .cause-value strong {
+    font-size: 0.68rem;
+  }
+
+  .cause-value small,
+  .cause-note {
+    font-size: 0.58rem;
   }
 }
 

@@ -26,6 +26,8 @@ const INDEX = {
 };
 
 const DAYS = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const DAYS_SHORT = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const MIN_RANKING_FLIGHTS = 20;
 const CAUSES = [
   ["Carrier", "carrierDelayMinutes", "carrierDelayFlights", "Within the airline's control, such as maintenance, crew, cleaning, baggage loading, or fueling."],
   ["Late aircraft", "lateAircraftDelayMinutes", "lateAircraftDelayFlights", "The aircraft used for this flight arrived late from its previous flight."],
@@ -39,6 +41,7 @@ const FILTER_NAMES = {
   origin: "Origin",
   dayOfWeek: "Weekday",
   departureWindow: "Departure",
+  heatmapSelection: "Time range",
 };
 
 const state = {
@@ -49,6 +52,7 @@ const state = {
     dayOfWeek: null,
     departureWindow: null,
   },
+  heatmapSelection: null,
   originLabelToCode: new Map(),
 };
 
@@ -120,11 +124,18 @@ function groupRows(rows, keyFn) {
 
 function matches(row, excluded = new Set()) {
   const f = state.filters;
+  const selection = state.heatmapSelection;
+  const dayMatches = excluded.has("dayOfWeek") || (selection
+    ? selection.days.includes(row[INDEX.dayOfWeek])
+    : !f.dayOfWeek || row[INDEX.dayOfWeek] === f.dayOfWeek);
+  const windowMatches = excluded.has("departureWindow") || (selection
+    ? selection.windows.includes(row[INDEX.departureWindow])
+    : !f.departureWindow || row[INDEX.departureWindow] === f.departureWindow);
   return (
     (excluded.has("airline") || !f.airline || row[INDEX.airline] === f.airline) &&
     (excluded.has("origin") || !f.origin || row[INDEX.origin] === f.origin) &&
-    (excluded.has("dayOfWeek") || !f.dayOfWeek || row[INDEX.dayOfWeek] === f.dayOfWeek) &&
-    (excluded.has("departureWindow") || !f.departureWindow || row[INDEX.departureWindow] === f.departureWindow)
+    dayMatches &&
+    windowMatches
   );
 }
 
@@ -134,21 +145,24 @@ function filteredRows(...exclude) {
 }
 
 function hasFilters() {
-  return Object.values(state.filters).some(Boolean);
+  return Object.values(state.filters).some(Boolean) || Boolean(state.heatmapSelection);
 }
 
 function toggleFilter(key, value) {
+  if (key === "dayOfWeek" || key === "departureWindow") state.heatmapSelection = null;
   state.filters[key] = state.filters[key] === value ? null : value;
   renderAll();
 }
 
 function setFilter(key, value) {
+  if (key === "dayOfWeek" || key === "departureWindow") state.heatmapSelection = null;
   state.filters[key] = value;
   renderAll();
 }
 
 function resetFilters() {
   for (const key of Object.keys(state.filters)) state.filters[key] = null;
+  state.heatmapSelection = null;
   renderAll();
 }
 
@@ -169,6 +183,21 @@ function windowLabel(value, compact = false) {
     return `${start % 12 || 12}${startSuffix}–${end % 12 || 12}${endSuffix}`;
   }
   return `${formatHour(start)}–${formatHour(end)}`;
+}
+
+function heatmapSelectionLabel(compact = false) {
+  const selection = state.heatmapSelection;
+  if (!selection) return "";
+  const firstDay = selection.days[0];
+  const lastDay = selection.days[selection.days.length - 1];
+  const dayNames = compact ? DAYS_SHORT : DAYS;
+  const dayText = firstDay === lastDay ? dayNames[firstDay] : `${dayNames[firstDay]}–${dayNames[lastDay]}`;
+  const firstWindow = selection.windows[0];
+  const lastWindow = selection.windows[selection.windows.length - 1];
+  const timeText = firstWindow === lastWindow
+    ? windowLabel(firstWindow, compact)
+    : windowLabel(`${firstWindow.split("-")[0]}-${lastWindow.split("-")[1]}`, compact);
+  return `${dayText} · ${timeText}`;
 }
 
 function filterLabel(key, value) {
@@ -245,8 +274,9 @@ function renderFilterControls() {
   };
   for (const [key, selector] of Object.entries(controls)) {
     const select = document.querySelector(selector);
-    select.value = state.filters[key] ?? "";
-    select.classList.toggle("active-filter", Boolean(state.filters[key]));
+    const replacedByRange = Boolean(state.heatmapSelection) && (key === "dayOfWeek" || key === "departureWindow");
+    select.value = replacedByRange ? "" : state.filters[key] ?? "";
+    select.classList.toggle("active-filter", !replacedByRange && Boolean(state.filters[key]));
   }
 
   const originInput = document.querySelector("#origin-filter");
@@ -262,21 +292,33 @@ function renderFilters() {
   for (const key of ["airline", "origin", "dayOfWeek", "departureWindow"]) {
     if (state.filters[key]) active.push([key, filterLabel(key, state.filters[key])]);
   }
+  if (state.heatmapSelection) active.push(["heatmapSelection", heatmapSelectionLabel()]);
   container.innerHTML = active.length
     ? active.map(([key, value]) => `<button class="filter-chip" type="button" data-key="${key}" aria-label="Remove ${FILTER_NAMES[key]} filter: ${escapeHtml(value)}"><strong>${FILTER_NAMES[key]}:</strong>&nbsp;${escapeHtml(value)}</button>`).join("")
     : "";
   container.querySelectorAll(".filter-chip").forEach((chip) => {
-    chip.addEventListener("click", () => setFilter(chip.dataset.key, null));
+    chip.addEventListener("click", () => {
+      if (chip.dataset.key === "heatmapSelection") {
+        state.heatmapSelection = null;
+        renderAll();
+      } else {
+        setFilter(chip.dataset.key, null);
+      }
+    });
   });
   document.querySelector("#reset-button").disabled = active.length === 0;
 }
 
 function scopeItems(excluded = new Set()) {
   const items = [];
-  if (!excluded.has("airline") && state.filters.airline) items.push(`Carrier ${state.filters.airline}`);
-  if (!excluded.has("origin") && state.filters.origin) items.push(`Origin ${state.filters.origin}`);
-  if (!excluded.has("dayOfWeek") && state.filters.dayOfWeek) items.push(DAYS[state.filters.dayOfWeek]);
-  if (!excluded.has("departureWindow") && state.filters.departureWindow) items.push(windowLabel(state.filters.departureWindow));
+  if (!excluded.has("airline") && state.filters.airline) items.push(state.filters.airline);
+  if (!excluded.has("origin") && state.filters.origin) items.push(state.filters.origin);
+  if (state.heatmapSelection) {
+    if (!excluded.has("dayOfWeek") && !excluded.has("departureWindow")) items.push(heatmapSelectionLabel(true));
+  } else {
+    if (!excluded.has("dayOfWeek") && state.filters.dayOfWeek) items.push(DAYS_SHORT[state.filters.dayOfWeek]);
+    if (!excluded.has("departureWindow") && state.filters.departureWindow) items.push(windowLabel(state.filters.departureWindow, true));
+  }
   return items;
 }
 
@@ -293,16 +335,8 @@ function renderPanelScopes() {
   setScope("#timeline-scope");
   setScope("#carrier-scope", ["airline"]);
   setScope("#airport-scope", ["origin"]);
-  setScope("#heatmap-scope", ["dayOfWeek", "departureWindow"]);
+  setScope("#heatmap-scope");
   setScope("#cause-scope");
-
-  const heatmapSelections = [];
-  if (state.filters.dayOfWeek) heatmapSelections.push(DAYS[state.filters.dayOfWeek]);
-  if (state.filters.departureWindow) heatmapSelections.push(windowLabel(state.filters.departureWindow));
-  if (heatmapSelections.length) {
-    const scope = document.querySelector("#heatmap-scope");
-    scope.textContent += ` · Selection: ${heatmapSelections.join(" · ")}`;
-  }
 }
 
 function renderKpis() {
@@ -317,9 +351,12 @@ function renderKpis() {
   document.querySelector("#kpi-scope").textContent = hasFilters() ? "Filtered selection" : "All reported flights";
 }
 
-function showTooltip(event, title, lines) {
+function showTooltip(event, title, lines, meaning = "") {
   const tooltip = document.querySelector("#tooltip");
-  tooltip.innerHTML = `<strong>${escapeHtml(title)}</strong>${lines.map((line) => `<span>${escapeHtml(line)}</span>`).join("")}`;
+  tooltip.innerHTML = `
+    <strong class="tooltip-title">${escapeHtml(title)}</strong>
+    ${meaning ? `<div class="tooltip-meaning"><span class="tooltip-section-label">Meaning</span><span>${escapeHtml(meaning)}</span></div>` : ""}
+    <div class="tooltip-lines">${lines.map((line) => `<span>${escapeHtml(line)}</span>`).join("")}</div>`;
   tooltip.hidden = false;
   const pad = 14;
   const box = tooltip.getBoundingClientRect();
@@ -348,7 +385,7 @@ function bindTargets(container, handler, tooltipBuilder) {
     }
     target.addEventListener("pointermove", (event) => {
       const tip = tooltipBuilder(target.dataset);
-      showTooltip(event, tip.title, tip.lines);
+      showTooltip(event, tip.title, tip.lines, tip.meaning);
     });
     target.addEventListener("pointerleave", hideTooltip);
     target.addEventListener("blur", hideTooltip);
@@ -372,18 +409,41 @@ function renderTimeline() {
   const values = entries.map(([, metrics]) => onTimeRate(metrics));
   const minY = Math.max(0, Math.floor(Math.min(...values) / 5) * 5 - 5);
   const maxY = Math.min(100, Math.ceil(Math.max(...values) / 5) * 5 + 5);
-  const x = (i) => margin.left + (entries.length === 1 ? innerW / 2 : (i * innerW) / (entries.length - 1));
+  const allDates = [...new Set(state.data.rows.map((row) => row[INDEX.date]))].sort();
+  const firstDateMs = Date.parse(`${allDates[0]}T00:00:00Z`);
+  const lastDateMs = Date.parse(`${allDates.at(-1)}T00:00:00Z`);
+  const dateRangeMs = Math.max(1, lastDateMs - firstDateMs);
+  const x = (date) => margin.left + ((Date.parse(`${date}T00:00:00Z`) - firstDateMs) / dateRangeMs) * innerW;
   const y = (value) => margin.top + innerH - ((value - minY) / Math.max(1, maxY - minY)) * innerH;
-  const points = entries.map(([date, metrics], index) => ({ date, metrics, value: onTimeRate(metrics), x: x(index), y: y(onTimeRate(metrics)) }));
+  const points = entries.map(([date, metrics]) => ({ date, metrics, value: onTimeRate(metrics), x: x(date), y: y(onTimeRate(metrics)) }));
   const path = points.map((point, index) => `${index ? "L" : "M"}${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
   const ticks = [minY, (minY + maxY) / 2, maxY];
+  const average = onTimeRate(summarize(filteredRows()));
+  const selectedWeekdayCount = state.heatmapSelection
+    ? state.heatmapSelection.days.length
+    : state.filters.dayOfWeek
+      ? 1
+      : 0;
+  const showEveryAvailableDate = selectedWeekdayCount === 1;
+  const dateTicks = showEveryAvailableDate
+    ? points.map(({ date, x: tickX }) => ({ date, x: tickX }))
+    : Array.from(
+        { length: Math.floor((lastDateMs - firstDateMs) / (7 * 24 * 60 * 60 * 1000)) + 1 },
+        (_, index) => {
+          const tickMs = firstDateMs + index * 7 * 24 * 60 * 60 * 1000;
+          const date = new Date(tickMs).toISOString().slice(0, 10);
+          return { date, x: x(date) };
+        },
+      );
 
   container.innerHTML = `
-    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Daily on-time arrival rate for July 2026.">
+    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Daily on-time arrival rate for July 2026, with a ${average.toFixed(1)} percent average reference line.">
       ${ticks.map((tick) => `<line class="grid-line" x1="${margin.left}" x2="${width - margin.right}" y1="${y(tick)}" y2="${y(tick)}"></line><text x="${margin.left - 9}" y="${y(tick) + 4}" text-anchor="end">${tick.toFixed(0)}%</text>`).join("")}
+      <line class="reference-line" x1="${margin.left}" x2="${width - margin.right}" y1="${y(average)}" y2="${y(average)}"></line>
+      <text class="reference-label" x="${width - margin.right - 4}" y="${y(average) - 6}" text-anchor="end">Average ${average.toFixed(1)}%</text>
       <path d="${path}" fill="none" stroke="#1261a0" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path>
       ${points.map((point, index) => `<circle class="chart-target data-only-mark" tabindex="0" role="img" aria-label="${escapeHtml(dateFormat.format(new Date(`${point.date}T00:00:00Z`)))}: ${point.value.toFixed(1)} percent on time" data-date="${point.date}" data-index="${index}" cx="${point.x}" cy="${point.y}" r="4" fill="#2f80c9"></circle>`).join("")}
-      ${points.filter((_, index) => index % 5 === 0 || index === points.length - 1).map((point) => `<text x="${point.x}" y="${height - 8}" text-anchor="middle">${dateFormat.format(new Date(`${point.date}T00:00:00Z`))}</text>`).join("")}
+      ${dateTicks.map((tick) => `<text x="${tick.x}" y="${height - 8}" text-anchor="middle">${dateFormat.format(new Date(`${tick.date}T00:00:00Z`))}</text>`).join("")}
       <text x="13" y="${margin.top + innerH / 2}" transform="rotate(-90 13 ${margin.top + innerH / 2})" text-anchor="middle">On-time arrival rate</text>
     </svg>`;
 
@@ -404,18 +464,15 @@ function renderRanking({ selector, groupKey, exclude, selectedValue, titleFor, m
   const container = document.querySelector(selector);
   const grouped = groupRows(filteredRows(exclude), (row) => row[INDEX[groupKey]]);
   let entries = [...grouped.entries()].map(([key, metrics]) => ({ key, metrics, value: onTimeRate(metrics) }));
-  if (groupKey === "origin") {
-    const sorted = entries.sort(
-      (a, b) => b.value - a.value || b.metrics.flights - a.metrics.flights || a.key.localeCompare(b.key)
-    );
+  const addRanks = (sortedEntries) => {
     const tieCounts = new Map();
-    for (const entry of sorted) {
+    for (const entry of sortedEntries) {
       const rateKey = entry.value.toFixed(10);
       tieCounts.set(rateKey, (tieCounts.get(rateKey) || 0) + 1);
     }
     let previousValue = null;
     let currentRank = 0;
-    const ranked = sorted.map((entry, index) => {
+    return sortedEntries.map((entry, index) => {
       if (previousValue === null || Math.abs(entry.value - previousValue) > 1e-9) currentRank = index + 1;
       previousValue = entry.value;
       return {
@@ -424,52 +481,124 @@ function renderRanking({ selector, groupKey, exclude, selectedValue, titleFor, m
         tied: tieCounts.get(entry.value.toFixed(10)) > 1,
       };
     });
-    if (selectedValue && grouped.has(selectedValue)) {
+  };
+  if (groupKey === "origin") {
+    const allEntries = entries.sort(
+      (a, b) => b.value - a.value || b.metrics.flights - a.metrics.flights || a.key.localeCompare(b.key)
+    );
+    const eligible = allEntries.filter((entry) => entry.metrics.flights >= MIN_RANKING_FLIGHTS);
+    const ranked = addRanks(eligible);
+    const selectedMetrics = selectedValue ? grouped.get(selectedValue) : null;
+    const selectedIsEligible = selectedMetrics?.flights >= MIN_RANKING_FLIGHTS;
+    if (selectedValue && selectedIsEligible) {
       const selectedIndex = ranked.findIndex((entry) => entry.key === selectedValue);
       const selectedEntry = ranked[selectedIndex];
       const start = Math.max(0, Math.min(selectedIndex - Math.floor((maxRows - 1) / 2), ranked.length - maxRows));
       entries = ranked.slice(start, start + maxRows);
       document.querySelector("#airport-note").textContent = selectedEntry.tied
-        ? `Selected origin is tied #${selectedEntry.rank} among ${ranked.length} origins; nearby origins shown`
-        : `Selected origin ranks #${selectedEntry.rank} among ${ranked.length} origins; nearby origins shown`;
+        ? `Selected: tied rank #${selectedEntry.rank} of ${ranked.length} eligible origins`
+        : `Selected: rank #${selectedEntry.rank} of ${ranked.length} eligible origins`;
+    } else if (selectedValue && selectedMetrics) {
+      const selectedEntry = allEntries.find((entry) => entry.key === selectedValue);
+      const referenceEntries = [
+        ...ranked,
+        { ...selectedEntry, rank: null, tied: false, referenceOnly: true },
+      ].sort(
+        (a, b) => b.value - a.value || b.metrics.flights - a.metrics.flights || a.key.localeCompare(b.key)
+      );
+      const selectedIndex = referenceEntries.findIndex((entry) => entry.key === selectedValue);
+      const start = Math.max(0, Math.min(selectedIndex - Math.floor((maxRows - 1) / 2), referenceEntries.length - maxRows));
+      entries = referenceEntries.slice(start, start + maxRows);
+      document.querySelector("#airport-note").textContent = `Selected origin: small sample with only ${numberFormat.format(selectedMetrics.flights)} flights · shown for reference`;
+    } else if (!selectedValue && !ranked.length && allEntries.length) {
+      entries = allEntries.slice(0, maxRows).map((entry) => ({
+        ...entry,
+        rank: null,
+        tied: false,
+        referenceOnly: true,
+      }));
+      document.querySelector("#airport-note").textContent =
+        "No eligible origins · small samples shown for reference";
     } else {
       entries = ranked.slice(0, maxRows);
       document.querySelector("#airport-note").textContent = selectedValue
-        ? `Selected origin has no flights under current filters; top ${Math.min(maxRows, ranked.length)} shown`
-        : `Top ${Math.min(maxRows, ranked.length)} of ${ranked.length} origins by on-time rate`;
+        ? "Selected: no flights"
+        : `Top ${Math.min(maxRows, ranked.length)} of ${ranked.length} eligible origins`;
     }
   } else {
-    entries.sort((a, b) => b.value - a.value || b.metrics.flights - a.metrics.flights);
+    const allEntries = entries.sort(
+      (a, b) => b.value - a.value || b.metrics.flights - a.metrics.flights || a.key.localeCompare(b.key)
+    );
+    const eligible = allEntries.filter((entry) => entry.metrics.flights >= MIN_RANKING_FLIGHTS);
+    const ranked = addRanks(eligible);
+    const selectedMetrics = selectedValue ? grouped.get(selectedValue) : null;
+    const selectedEntry = selectedValue ? allEntries.find((entry) => entry.key === selectedValue) : null;
+    const selectedRankedEntry = selectedValue ? ranked.find((entry) => entry.key === selectedValue) : null;
+    const selectedIsSmallSample = selectedMetrics && selectedMetrics.flights < MIN_RANKING_FLIGHTS;
+    const showReferenceFallback = !selectedValue && !eligible.length && allEntries.length;
+    entries = selectedIsSmallSample
+      ? [...eligible, { ...selectedEntry, referenceOnly: true }].sort(
+          (a, b) => b.value - a.value || b.metrics.flights - a.metrics.flights || a.key.localeCompare(b.key)
+        )
+      : showReferenceFallback
+        ? allEntries.slice(0, maxRows).map((entry) => ({ ...entry, referenceOnly: true }))
+        : eligible;
+
+    const carrierNote = document.querySelector("#carrier-note");
+    if (selectedIsSmallSample) {
+      carrierNote.textContent = `Selected carrier: small sample with only ${numberFormat.format(selectedMetrics.flights)} flights · shown for reference`;
+      carrierNote.hidden = false;
+    } else if (selectedValue && !selectedMetrics) {
+      carrierNote.textContent = "Selected carrier: no flights";
+      carrierNote.hidden = false;
+    } else if (selectedRankedEntry) {
+      carrierNote.textContent = selectedRankedEntry.tied
+        ? `Selected: tied rank #${selectedRankedEntry.rank} of ${ranked.length} eligible carriers`
+        : `Selected: rank #${selectedRankedEntry.rank} of ${ranked.length} eligible carriers`;
+      carrierNote.hidden = false;
+    } else if (showReferenceFallback) {
+      carrierNote.textContent = "No eligible carriers · small samples shown for reference";
+      carrierNote.hidden = false;
+    } else {
+      carrierNote.textContent = "";
+      carrierNote.hidden = true;
+    }
   }
   if (!entries.length) {
-    container.innerHTML = '<p class="filter-empty">No flights match this selection.</p>';
+    const entityLabel = groupKey === "origin" ? "origins" : "carriers";
+    container.innerHTML = `<p class="filter-empty">No ${entityLabel} meet the ${MIN_RANKING_FLIGHTS}-flight ranking minimum.</p>`;
     return;
   }
 
   const width = 720;
   const rowH = 27;
-  const margin = { top: 18, right: groupKey === "origin" ? 155 : 89, bottom: 24, left: 155 };
+  const margin = { top: 18, right: 89, bottom: 24, left: 155 };
   const height = margin.top + margin.bottom + entries.length * rowH;
   const innerW = width - margin.left - margin.right;
   const min = Math.max(0, Math.floor(Math.min(...entries.map((entry) => entry.value)) / 5) * 5 - 5);
   const max = Math.min(100, Math.ceil(Math.max(...entries.map((entry) => entry.value)) / 5) * 5 + 5);
-  const scale = (value) => ((value - min) / Math.max(1, max - min)) * innerW;
+  const scale = (value) => margin.left + ((value - min) / Math.max(1, max - min)) * innerW;
 
   container.innerHTML = `
-    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="On-time arrival rate ranking. Select a row to filter the dashboard.">
+    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="On-time arrival rate dot plot. Select a row to filter the dashboard.">
       <line class="axis-line" x1="${margin.left}" x2="${margin.left}" y1="0" y2="${height - margin.bottom}"></line>
       ${entries.map((entry, index) => {
         const y = margin.top + index * rowH;
         const selected = selectedValue === entry.key;
-        const smallSample = groupKey === "origin" && entry.metrics.flights < 10;
+        const smallSample = entry.metrics.flights < MIN_RANKING_FLIGHTS;
         const rankLabel = entry.rank ? (entry.tied ? `Tied #${entry.rank} · ` : `#${entry.rank} · `) : "";
         const rowTitle = `${rankLabel}${titleFor(entry.key)}`;
         const rankDescription = entry.rank ? `${entry.tied ? "tied rank" : "rank"} ${entry.rank}; ` : "";
-        const sampleDescription = smallSample ? "; small sample, fewer than 10 reported flights" : "";
+        const sampleDescription = smallSample ? `; small sample, fewer than ${MIN_RANKING_FLIGHTS} reported flights` : "";
+        const pointX = scale(entry.value);
+        const placeValueLeft = smallSample && pointX > width - margin.right - 90;
+        const valueLabelX = pointX + (placeValueLeft ? -11 : 11);
         return `<g class="chart-target" tabindex="0" role="button" aria-label="${escapeHtml(titleFor(entry.key))}: ${rankDescription}${entry.value.toFixed(1)} percent on time${sampleDescription}" data-key="${escapeHtml(entry.key)}" data-index="${index}">
+          <rect x="${margin.left}" y="${y}" width="${innerW}" height="${rowH - 2}" fill="transparent"></rect>
           <text x="${margin.left - 10}" y="${y + 15}" text-anchor="end" font-weight="${selected ? 800 : 600}" fill="${selected ? "#8d4109" : "#43576b"}">${escapeHtml(rowTitle)}</text>
-          <rect class="${selected ? "selected-mark" : ""}" x="${margin.left}" y="${y + 2}" width="${Math.max(1, scale(entry.value))}" height="16" rx="4" fill="${selected ? "#fff0e3" : "#2f80c9"}"></rect>
-          <text x="${margin.left + scale(entry.value) + 8}" y="${y + 15}" font-weight="700">${entry.value.toFixed(1)}%${smallSample ? '<tspan fill="#6b7d90" font-size="10.2" font-weight="600"> · small sample</tspan>' : ""}</text>
+          <line class="dot-row-guide" x1="${margin.left}" x2="${width - margin.right}" y1="${y + 10}" y2="${y + 10}"></line>
+          <circle class="ranking-dot ${selected ? "selected-dot" : ""}" cx="${pointX}" cy="${y + 10}" r="${selected ? 7 : 6}" fill="${selected ? "#fff0e3" : "#2f80c9"}"></circle>
+          <text x="${valueLabelX}" y="${y + 15}" text-anchor="${placeValueLeft ? "end" : "start"}" font-weight="700">${entry.value.toFixed(1)}%${smallSample ? '<tspan fill="#6b7d90" font-size="10.2" font-weight="600"> · small sample</tspan>' : ""}</text>
         </g>`;
       }).join("")}
       <text x="${margin.left}" y="${height - 4}">${min}%</text>
@@ -482,8 +611,10 @@ function renderRanking({ selector, groupKey, exclude, selectedValue, titleFor, m
     ({ index }) => {
       const entry = entries[Number(index)];
       const averageDelay = entry.metrics.delayed15 ? entry.metrics.delayedArrivalDelayMinutes / entry.metrics.delayed15 : 0;
-      const lines = [`${entry.value.toFixed(1)}% on time`, `${numberFormat.format(entry.metrics.flights)} reported flights`, `${averageDelay.toFixed(1)} avg delay min among delayed arrivals`];
-      if (groupKey === "origin" && entry.metrics.flights < 10) lines.push("Small sample: fewer than 10 reported flights");
+      const lines = [`${numberFormat.format(entry.metrics.flights)} reported flights`, `${entry.value.toFixed(1)}% on time`, `${averageDelay.toFixed(1)} avg delay min among delayed arrivals`];
+      if (entry.metrics.flights < MIN_RANKING_FLIGHTS) {
+        lines.push(`Below the ${MIN_RANKING_FLIGHTS}-flight ranking minimum`, "Shown for reference");
+      }
       return {
         title: titleFor(entry.key),
         lines,
@@ -516,49 +647,153 @@ function renderHeatmap() {
   const min = values.length ? Math.min(...values) : 0;
   const max = values.length ? Math.max(...values) : 1;
   const width = 760;
-  const height = 254;
-  const margin = { top: 40, right: 18, bottom: 12, left: 70 };
+  const height = 268;
+  const margin = { top: 54, right: 18, bottom: 12, left: 70 };
   const cellW = (width - margin.left - margin.right) / Math.max(1, windows.length);
   const cellH = (height - margin.top - margin.bottom) / 7;
+  const rangeSelection = state.heatmapSelection;
+  const inRangeSelection = (day, window) => Boolean(
+    rangeSelection && rangeSelection.days.includes(day) && rangeSelection.windows.includes(window)
+  );
 
   container.innerHTML = `
-    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Heatmap of delay rate by weekday and two-hour scheduled departure window. Select a cell to filter the dashboard.">
+    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Heatmap of delay rate by weekday and two-hour scheduled departure window. Click a cell for one time block or drag across cells to filter a continuous range.">
+      <text class="heat-axis-title" x="${margin.left + (width - margin.left - margin.right) / 2}" y="13" text-anchor="middle">Scheduled departure time (local)</text>
       ${windows.map((window, index) => {
-        const muted = state.filters.departureWindow && state.filters.departureWindow !== window;
-        const active = state.filters.departureWindow === window;
+        const muted = rangeSelection
+          ? !rangeSelection.windows.includes(window)
+          : state.filters.departureWindow && state.filters.departureWindow !== window;
+        const active = rangeSelection
+          ? rangeSelection.windows.includes(window)
+          : state.filters.departureWindow === window;
         return `<text x="${margin.left + index * cellW + cellW / 2}" y="${margin.top - 12}" text-anchor="middle" fill="${muted ? "#aeb8c2" : active ? "#8d4109" : "#43576b"}" font-weight="${active ? 800 : 400}">${escapeHtml(windowLabel(window, true))}</text>`;
       }).join("")}
       ${DAYS.slice(1).map((day, index) => {
         const dayNumber = index + 1;
-        const muted = state.filters.dayOfWeek && state.filters.dayOfWeek !== dayNumber;
-        const active = state.filters.dayOfWeek === dayNumber;
+        const muted = rangeSelection
+          ? !rangeSelection.days.includes(dayNumber)
+          : state.filters.dayOfWeek && state.filters.dayOfWeek !== dayNumber;
+        const active = rangeSelection
+          ? rangeSelection.days.includes(dayNumber)
+          : state.filters.dayOfWeek === dayNumber;
         return `<text x="${margin.left - 12}" y="${margin.top + index * cellH + cellH / 2 + 4}" text-anchor="end" fill="${muted ? "#aeb8c2" : active ? "#8d4109" : "#43576b"}" font-weight="${active ? 800 : 400}">${day}</text>`;
       }).join("")}
       ${cells.map((cell) => {
         const x = margin.left + windows.indexOf(cell.window) * cellW;
         const y = margin.top + (cell.day - 1) * cellH;
-        const selected = state.filters.dayOfWeek === cell.day && state.filters.departureWindow === cell.window;
-        const mutedDay = state.filters.dayOfWeek && state.filters.dayOfWeek !== cell.day;
-        const mutedWindow = state.filters.departureWindow && state.filters.departureWindow !== cell.window;
-        const muted = mutedDay || mutedWindow;
-        return `<rect class="chart-target ${selected ? "selected-mark" : ""} ${muted ? "muted-heat-cell" : ""}" tabindex="0" role="button" aria-label="${DAYS[cell.day]}, ${escapeHtml(windowLabel(cell.window))}: ${cell.value.toFixed(1)} percent delayed" data-day="${cell.day}" data-window="${escapeHtml(cell.window)}" data-value="${cell.value.toFixed(2)}" data-flights="${cell.metrics.flights}" x="${x + 2}" y="${y + 2}" width="${Math.max(1, cellW - 4)}" height="${Math.max(1, cellH - 4)}" rx="4" fill="${muted ? "#edf1f5" : heatColor(cell.value, min, max)}"></rect>`;
+        const selected = rangeSelection
+          ? inRangeSelection(cell.day, cell.window)
+          : state.filters.dayOfWeek === cell.day && state.filters.departureWindow === cell.window;
+        const mutedDay = rangeSelection
+          ? !rangeSelection.days.includes(cell.day)
+          : state.filters.dayOfWeek && state.filters.dayOfWeek !== cell.day;
+        const mutedWindow = rangeSelection
+          ? !rangeSelection.windows.includes(cell.window)
+          : state.filters.departureWindow && state.filters.departureWindow !== cell.window;
+        const muted = rangeSelection ? !selected : mutedDay || mutedWindow;
+        return `<rect class="chart-target ${selected ? "selected-mark" : ""} ${muted ? "muted-heat-cell" : ""}" tabindex="0" role="button" aria-label="${DAYS[cell.day]}, ${escapeHtml(windowLabel(cell.window))}: ${cell.value.toFixed(1)} percent delayed" data-day="${cell.day}" data-window="${escapeHtml(cell.window)}" data-value="${cell.value.toFixed(2)}" data-flights="${cell.metrics.flights}" x="${x + 2}" y="${y + 2}" width="${Math.max(1, cellW - 4)}" height="${Math.max(1, cellH - 4)}" rx="4" fill="${heatColor(cell.value, min, max)}"></rect>`;
       }).join("")}
     </svg>`;
 
+  let suppressClick = false;
   bindTargets(
     container,
     ({ day, window }) => {
+      if (suppressClick) return;
       const numericDay = Number(day);
       const alreadySelected = state.filters.dayOfWeek === numericDay && state.filters.departureWindow === window;
+      state.heatmapSelection = null;
       state.filters.dayOfWeek = alreadySelected ? null : numericDay;
       state.filters.departureWindow = alreadySelected ? null : window;
       renderAll();
     },
-    ({ day, window, value, flights }) => ({
-      title: `${DAYS[Number(day)]} · ${windowLabel(window)}`,
-      lines: [`${Number(value).toFixed(1)}% delayed ≥15 min`, `${numberFormat.format(Number(flights))} reported flights`],
-    })
+    ({ day, window }) => {
+      const cell = cells.find((entry) => entry.day === Number(day) && entry.window === window);
+      const averageDelay = cell.metrics.delayed15
+        ? cell.metrics.delayedArrivalDelayMinutes / cell.metrics.delayed15
+        : 0;
+      return {
+        title: `${DAYS[Number(day)]} · ${windowLabel(window)}`,
+        lines: [
+          `${numberFormat.format(cell.metrics.flights)} reported flights`,
+          `${onTimeRate(cell.metrics).toFixed(1)}% on time`,
+          `${cell.value.toFixed(1)}% delayed ≥15 min`,
+          `${averageDelay.toFixed(1)} avg delay min among delayed arrivals`,
+        ],
+      };
+    }
   );
+
+  const svg = container.querySelector("svg");
+  let brush = null;
+  const cellFromPointer = (event) => {
+    const bounds = svg.getBoundingClientRect();
+    const localX = ((event.clientX - bounds.left) / bounds.width) * width;
+    const localY = ((event.clientY - bounds.top) / bounds.height) * height;
+    const column = Math.floor((localX - margin.left) / cellW);
+    const row = Math.floor((localY - margin.top) / cellH);
+    if (column < 0 || column >= windows.length || row < 0 || row >= 7) return null;
+    return { day: row + 1, windowIndex: column };
+  };
+  const previewBrush = () => {
+    const minDay = Math.min(brush.start.day, brush.end.day);
+    const maxDay = Math.max(brush.start.day, brush.end.day);
+    const minWindow = Math.min(brush.start.windowIndex, brush.end.windowIndex);
+    const maxWindow = Math.max(brush.start.windowIndex, brush.end.windowIndex);
+    container.querySelectorAll("rect.chart-target").forEach((target) => {
+      const targetDay = Number(target.dataset.day);
+      const targetWindow = windows.indexOf(target.dataset.window);
+      const previewed = targetDay >= minDay && targetDay <= maxDay && targetWindow >= minWindow && targetWindow <= maxWindow;
+      target.classList.toggle("brush-preview", previewed);
+    });
+  };
+
+  svg.addEventListener("pointerdown", (event) => {
+    if (event.pointerType !== "mouse" || event.button !== 0 || !event.target.closest("rect.chart-target")) return;
+    const cell = cellFromPointer(event);
+    if (!cell) return;
+    brush = { pointerId: event.pointerId, start: cell, end: cell, moved: false, captured: false };
+    hideTooltip();
+  });
+  svg.addEventListener("pointermove", (event) => {
+    if (!brush || event.pointerId !== brush.pointerId) return;
+    const cell = cellFromPointer(event);
+    if (!cell) return;
+    if (cell.day !== brush.start.day || cell.windowIndex !== brush.start.windowIndex) {
+      brush.moved = true;
+      if (!brush.captured) {
+        svg.setPointerCapture(event.pointerId);
+        brush.captured = true;
+      }
+    }
+    brush.end = cell;
+    previewBrush();
+    hideTooltip();
+    event.preventDefault();
+  });
+  svg.addEventListener("pointerup", (event) => {
+    if (!brush || event.pointerId !== brush.pointerId) return;
+    const completedBrush = brush;
+    brush = null;
+    if (completedBrush.captured && svg.hasPointerCapture(event.pointerId)) svg.releasePointerCapture(event.pointerId);
+    if (!completedBrush.moved) return;
+    const minDay = Math.min(completedBrush.start.day, completedBrush.end.day);
+    const maxDay = Math.max(completedBrush.start.day, completedBrush.end.day);
+    const minWindow = Math.min(completedBrush.start.windowIndex, completedBrush.end.windowIndex);
+    const maxWindow = Math.max(completedBrush.start.windowIndex, completedBrush.end.windowIndex);
+    suppressClick = true;
+    state.filters.dayOfWeek = null;
+    state.filters.departureWindow = null;
+    state.heatmapSelection = {
+      days: Array.from({ length: maxDay - minDay + 1 }, (_, index) => minDay + index),
+      windows: windows.slice(minWindow, maxWindow + 1),
+    };
+    renderAll();
+  });
+  svg.addEventListener("pointercancel", () => {
+    brush = null;
+    container.querySelectorAll(".brush-preview").forEach((target) => target.classList.remove("brush-preview"));
+  });
 }
 
 function renderCauses() {
@@ -573,27 +808,30 @@ function renderCauses() {
   const total = values.reduce((sum, item) => sum + item.value, 0);
   const max = Math.max(1, ...values.map((item) => item.value));
   container.innerHTML = values.map((item, index) => {
-    const share = total ? (100 * item.value) / total : 0;
+    const minuteShare = total ? (100 * item.value) / total : 0;
+    const delayedFlightShare = metrics.delayed15 ? (100 * item.flights) / metrics.delayed15 : 0;
     return `
-    <div class="cause-row chart-target data-only-mark" tabindex="0" role="img" data-index="${index}" aria-label="${escapeHtml(item.label)}: ${affectedFlightsLabel(item.flights)}, ${numberFormat.format(Math.round(item.value))} attributed delay minutes, ${share.toFixed(1)} percent of reported delay-cause minutes">
+    <div class="cause-row chart-target data-only-mark" tabindex="0" role="img" data-index="${index}" aria-label="${escapeHtml(item.label)}: ${affectedFlightsLabel(item.flights)}, ${delayedFlightShare.toFixed(1)} percent of delayed arrivals, ${numberFormat.format(Math.round(item.value))} attributed delay minutes, ${minuteShare.toFixed(1)} percent of reported delay-cause minutes">
       <span>${escapeHtml(item.label)}</span>
       <div class="cause-track" aria-hidden="true">
         <div class="cause-fill" style="width:${(100 * item.value) / max}%"></div>
       </div>
-      <strong class="cause-value">${compactFormat.format(Math.round(item.value))} min · ${share.toFixed(1)}%</strong>
+      <span class="cause-value"><strong>${compactFormat.format(Math.round(item.value))} min · ${minuteShare.toFixed(1)}%</strong></span>
     </div>`;
   }).join("");
 
   bindTargets(container, null, ({ index }) => {
     const item = values[Number(index)];
-    const share = total ? (100 * item.value) / total : 0;
+    const minuteShare = total ? (100 * item.value) / total : 0;
+    const delayedFlightShare = metrics.delayed15 ? (100 * item.flights) / metrics.delayed15 : 0;
     return {
       title: item.label,
+      meaning: item.description,
       lines: [
-        `Meaning: ${item.description}`,
         affectedFlightsLabel(item.flights),
+        `${delayedFlightShare.toFixed(1)}% of delayed arrivals`,
         `${numberFormat.format(Math.round(item.value))} attributed delay minutes`,
-        `${share.toFixed(1)}% of reported delay-cause minutes`,
+        `${minuteShare.toFixed(1)}% of reported delay-cause minutes`,
       ],
     };
   });
@@ -653,6 +891,7 @@ function registerWebMcp() {
       for (const [key, value] of Object.entries(input || {})) {
         if (!(key in state.filters)) throw new Error(`Unknown filter: ${key}`);
         if (value !== null && !validValues[key].has(value)) throw new Error(`Invalid ${key} value: ${value}`);
+        if (key === "dayOfWeek" || key === "departureWindow") state.heatmapSelection = null;
         state.filters[key] = value;
       }
       renderAll();
@@ -680,7 +919,12 @@ async function init() {
     state.data = await response.json();
     document.querySelector("#period-label").textContent = state.data.meta.period;
     document.querySelector("#source-link").href = state.data.meta.sourceUrl;
-    document.querySelector("#method-copy").textContent = `${numberFormat.format(state.data.meta.reportedFlights)} BTS-reported flights from ${state.data.meta.reportingCarrierCount} carriers and ${state.data.meta.originCount} origins. On time means arriving less than 15 minutes late; average delay covers arrivals delayed at least 15 minutes. Affected flights have more than zero minutes recorded for a cause; one flight may appear under multiple causes. Departure windows use scheduled local time.`;
+    document.querySelector("#method-copy").innerHTML = `
+      <p><strong>Dataset.</strong> ${escapeHtml(state.data.meta.period)} BTS Reporting Carrier On-Time Performance data: ${numberFormat.format(state.data.meta.reportedFlights)} reported flights from ${state.data.meta.reportingCarrierCount} reporting carriers and ${state.data.meta.originCount} origin airports.</p>
+      <p><strong>Metrics.</strong> An arrival is on time if it is less than 15 minutes late. Average delay is calculated only for arrivals delayed by at least 15 minutes. Departure windows use scheduled local departure time.</p>
+      <p><strong>Rankings.</strong> Carrier and airport rankings require at least ${MIN_RANKING_FLIGHTS} reported flights within the current selection. Items below the threshold are excluded from formal ranks but may be shown as small-sample references.</p>
+      <p><strong>Delay causes.</strong> An affected flight has more than zero attributed minutes recorded for that cause.</p>
+    `;
     document.querySelector("#reset-button").addEventListener("click", resetFilters);
     initializeFilterControls();
     document.querySelector("#loading").remove();
