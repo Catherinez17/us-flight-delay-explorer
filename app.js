@@ -81,6 +81,8 @@ function onTimeRate(metrics) {
   return metrics.completed > 0 ? 100 - rate(metrics.delayed15, metrics.completed) : 0;
 }
 
+// The data file stores additive metrics in pre-aggregated cube rows. Keeping all
+// rollups in these helpers gives every view the same denominators and totals.
 function emptyMetrics() {
   return {
     flights: 0,
@@ -122,6 +124,8 @@ function groupRows(rows, keyFn) {
   return groups;
 }
 
+// Cross-filtering uses one shared state. A view can exclude its own comparison
+// dimension so the selected item remains visible alongside its peers.
 function matches(row, excluded = new Set()) {
   const f = state.filters;
   const selection = state.heatmapSelection;
@@ -482,6 +486,10 @@ function renderRanking({ selector, groupKey, exclude, selectedValue, titleFor, m
       };
     });
   };
+
+  // Formal ranks use the minimum-flight threshold. A selected category below
+  // the threshold is inserted only as an explicitly unranked reference; when a
+  // strict filter leaves no eligible categories, small samples preserve context.
   if (groupKey === "origin") {
     const allEntries = entries.sort(
       (a, b) => b.value - a.value || b.metrics.flights - a.metrics.flights || a.key.localeCompare(b.key)
@@ -725,6 +733,9 @@ function renderHeatmap() {
   );
 
   const svg = container.querySelector("svg");
+
+  // Desktop brushing converts the dragged rectangle into contiguous weekday
+  // and time-window arrays. A click still selects one cell on any input device.
   let brush = null;
   const cellFromPointer = (event) => {
     const bounds = svg.getBoundingClientRect();
@@ -838,6 +849,7 @@ function renderCauses() {
 }
 
 function renderAll() {
+  // Re-render every coordinated view from the same filter state after a change.
   renderFilterControls();
   renderFilters();
   renderPanelScopes();
