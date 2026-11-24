@@ -13,7 +13,7 @@
       type="image/svg+xml"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b1f33'/%3E%3Cpath d='M11 36h16l13 15h7l-7-15h12c4 0 7-2 7-5s-3-5-7-5H40l7-14h-7L27 26H11l5-8h-6L3 31l7 13h6z' fill='%2358a6ff'/%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="styles.css?v=20261123-method-small" />
+    <link rel="stylesheet" href="styles.css?v=20261124-heatmap-extrema-selection" />
   </head>
   <body>
     <a class="skip-link" href="#dashboard">Skip to dashboard</a>
@@ -58,14 +58,20 @@
             <input id="origin-filter" type="search" list="origin-options" placeholder="All origins" aria-label="Search or select an origin airport" autocomplete="off" />
             <datalist id="origin-options"></datalist>
           </label>
-          <label>
-            <span>Weekday</span>
-            <select id="weekday-filter" data-filter="dayOfWeek" aria-label="Filter by weekday"></select>
-          </label>
-          <label>
+          <div class="filter-field">
+            <span>Day of week</span>
+            <details id="weekday-filter" class="multi-filter">
+              <summary id="weekday-summary">All days</summary>
+              <div id="weekday-options" class="multi-filter-menu" role="group" aria-label="Filter by days of week"></div>
+            </details>
+          </div>
+          <div class="filter-field">
             <span>Departure time</span>
-            <select id="window-filter" data-filter="departureWindow" aria-label="Filter by scheduled departure time"></select>
-          </label>
+            <details id="window-filter" class="multi-filter">
+              <summary id="window-summary">All times</summary>
+              <div id="window-options" class="multi-filter-menu" role="group" aria-label="Filter by scheduled departure times"></div>
+            </details>
+          </div>
         </div>
       </section>
 
@@ -149,9 +155,13 @@
           <div id="heatmap-chart" class="chart heatmap-chart"></div>
           <div class="heat-footer">
             <div class="heat-legend" aria-label="Delay rate legend">
-              <span>Lower delay rate</span>
-              <span class="heat-gradient" aria-hidden="true"></span>
-              <span>Higher delay rate</span>
+              <span id="heat-legend-min">Lower delay rate</span>
+              <span class="heat-gradient-wrap" aria-hidden="true">
+                <span class="heat-gradient"></span>
+                <span id="heat-legend-marker" class="heat-legend-marker" hidden></span>
+              </span>
+              <span id="heat-legend-max">Higher delay rate</span>
+              <span class="heat-no-data-key"><i aria-hidden="true"></i>No reported flights</span>
             </div>
           </div>
         </article>
@@ -181,6 +191,6 @@
     </main>
 
     <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
-    <script src="app.js?v=20261123-equal-ranking-width"></script>
+    <script src="app.js?v=20261124-heatmap-extrema-selection"></script>
   </body>
 </html>

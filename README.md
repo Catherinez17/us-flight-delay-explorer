@@ -14,7 +14,7 @@ The dashboard combines summary metrics with five coordinated views:
 - a weekday × scheduled-departure-time heatmap;
 - reported delay-cause minutes and their share of total cause minutes.
 
-Carrier, origin, weekday, and departure-time selections share one filter state. Selecting a carrier or airport updates the remaining views. A heatmap cell selects one weekday and time window; dragging across cells selects a continuous weekday–time range. Active filters are shown above the dashboard and can be removed individually or cleared with **Reset all**.
+Carrier, origin, weekday, and departure-time selections share one filter state. Carrier and origin controls select one category at a time. The weekday and departure-time menus allow multiple selections, including non-contiguous values. In the heatmap, clicking selects one weekday and time window, while dragging selects a continuous rectangular range. Both methods update the same filters and all coordinated views. Active selections appear above the dashboard and can be removed individually or cleared with **Reset all**.
 
 ## Rankings and sample size
 
@@ -48,9 +48,13 @@ No build step or package installation is required.
 - `index.html` — page structure, controls, view containers, and definitions;
 - `styles.css` — visual system, responsive layouts, focus states, and print styles;
 - `app.js` — data aggregation, shared filtering, chart rendering, tooltips, rankings, and heatmap brushing;
-- `data.json` — the aggregated July 2026 dashboard dataset.
+- `data.json` — the aggregated July 2026 dashboard dataset;
+- `scripts/build_data.py` — rebuilds the dashboard data from the monthly BTS download;
+- `notebooks/bts_data_cleaning_audit.ipynb` — documents and validates the cleaning and aggregation process.
 
-The interface uses responsive layouts for wide, medium, and narrow screens. Interactive chart marks include accessible labels and support keyboard selection; reduced-motion preferences are respected.
+## Browser support
+
+The dashboard supports current desktop versions of Chrome and Safari. Its responsive layout adapts to wide, medium, and narrow screens. Interactive chart marks include accessible labels and keyboard selection, and reduced-motion preferences are respected.
 
 ## Data source
 
@@ -58,4 +62,4 @@ U.S. Department of Transportation, Bureau of Transportation Statistics, [Reporti
 
 ## Development note
 
-The dashboard is implemented in project-specific HTML, CSS, and vanilla JavaScript without a charting library. AI-assisted tools supported implementation, debugging, and wording refinement.
+The dashboard is implemented in project-specific HTML, CSS, and vanilla JavaScript without a charting library. AI-assisted tools were used for implementation support, debugging, and wording edits.

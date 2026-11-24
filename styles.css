@@ -189,12 +189,14 @@ h1 {
   gap: 0.6rem;
 }
 
-.filter-controls label {
+.filter-controls > label,
+.filter-field {
   display: grid;
   gap: 0.3rem;
 }
 
-.filter-controls label > span {
+.filter-controls > label > span,
+.filter-field > span {
   color: var(--ink-soft);
   font-size: 0.72rem;
   font-weight: 700;
@@ -221,6 +223,103 @@ h1 {
 .filter-controls input.active-filter {
   border: 2px solid var(--orange);
   background: var(--orange-pale);
+}
+
+.multi-filter {
+  position: relative;
+  min-width: 0;
+}
+
+.multi-filter summary {
+  min-height: 33px;
+  overflow: hidden;
+  padding: 0.35rem 1.8rem 0.35rem 0.55rem;
+  border: 1px solid #b9c9d8;
+  border-radius: 8px;
+  background: white;
+  color: var(--ink);
+  cursor: pointer;
+  list-style: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.multi-filter summary::-webkit-details-marker {
+  display: none;
+}
+
+.multi-filter summary::after {
+  content: "▾";
+  position: absolute;
+  top: 0.42rem;
+  right: 0.55rem;
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+}
+
+.multi-filter[open] summary::after {
+  content: "▴";
+}
+
+.multi-filter.active-filter summary {
+  border: 2px solid var(--orange);
+  background: var(--orange-pale);
+  padding-top: calc(0.35rem - 1px);
+  padding-bottom: calc(0.35rem - 1px);
+  padding-left: calc(0.55rem - 1px);
+}
+
+.multi-filter-menu {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 0.3rem);
+  left: 0;
+  width: max(100%, 185px);
+  max-height: 285px;
+  overflow-y: auto;
+  padding: 0.35rem;
+  border: 1px solid #b9c9d8;
+  border-radius: 10px;
+  background: white;
+  box-shadow: 0 12px 28px rgba(11, 31, 51, 0.18);
+}
+
+.multi-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 31px;
+  padding: 0.25rem 0.4rem;
+  border-radius: 6px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 0.76rem;
+}
+
+.multi-option:hover {
+  background: var(--blue-pale);
+}
+
+.multi-option input {
+  width: 15px;
+  min-height: 15px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--blue);
+}
+
+.multi-filter-clear {
+  width: 100%;
+  margin-bottom: 0.25rem;
+  padding: 0.3rem 0.4rem;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--blue);
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-align: left;
 }
 
 .filter-chips {
@@ -634,12 +733,44 @@ h1 {
   white-space: nowrap;
 }
 
-.heat-gradient {
+.heat-gradient-wrap {
+  position: relative;
   flex: 0 0 130px;
   width: 130px;
   height: 10px;
+}
+
+.heat-gradient {
+  display: block;
+  width: 100%;
+  height: 100%;
   border-radius: 99px;
   background: linear-gradient(90deg, #eaf4fb, #0f5b98);
+}
+
+.heat-legend-marker {
+  position: absolute;
+  top: 50%;
+  width: 3px;
+  height: 18px;
+  border-radius: 2px;
+  background: var(--orange);
+  box-shadow: 0 0 0 1px white;
+  transform: translate(-50%, -50%);
+}
+
+.heat-no-data-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.heat-no-data-key i {
+  width: 12px;
+  height: 12px;
+  border: 1px solid #a7b2bd;
+  border-radius: 3px;
+  background: repeating-linear-gradient(135deg, #f4f6f8 0 3px, #a7b2bd 3px 5px);
 }
 
 .method-grid {
@@ -691,8 +822,23 @@ h1 {
   font-weight: 700;
 }
 
-.muted-heat-cell {
-  opacity: 0.48;
+.no-data-heat-cell:not(.selected-mark) {
+  stroke: #a7b2bd;
+  stroke-width: 0.8px;
+}
+
+.chart .extreme-heat-label {
+  fill: white;
+  font-size: 7.5px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(11, 31, 51, 0.6);
+}
+
+.chart .extreme-heat-label.on-light-cell {
+  fill: var(--ink);
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.9);
 }
 
 .tooltip {
@@ -884,7 +1030,7 @@ h1 {
     gap: 0.35rem 0.75rem;
   }
 
-  .heat-gradient {
+  .heat-gradient-wrap {
     flex-basis: 92px;
     width: 92px;
   }

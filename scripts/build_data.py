@@ -86,7 +86,7 @@ def build(source: Path, output: Path, top_airports: int) -> None:
             if retain_all_origins
             else {code for code, _ in origin_counts.most_common(top_airports)}
         )
-        cube = defaultdict(lambda: [0.0] * 12)
+        cube = defaultdict(lambda: [0.0] * 17)
 
         for row in rows_from(archive, member):
             origin = row["Origin"] if row["Origin"] in keep_origins else "Other"
@@ -114,9 +114,11 @@ def build(source: Path, output: Path, top_airports: int) -> None:
                     metrics[5] += number(row["ArrDelayMinutes"])
 
             for index, field in enumerate(CAUSE_FIELDS, start=6):
-                metrics[index] += number(row[field])
+                cause_minutes = number(row[field])
+                metrics[index] += cause_minutes
+                metrics[index + 5] += 1 if cause_minutes > 0 else 0
 
-            metrics[11] += number(row["Distance"])
+            metrics[16] += number(row["Distance"])
 
     schema = [
         "date",
@@ -135,6 +137,11 @@ def build(source: Path, output: Path, top_airports: int) -> None:
         "nasDelayMinutes",
         "securityDelayMinutes",
         "lateAircraftDelayMinutes",
+        "carrierDelayFlights",
+        "weatherDelayFlights",
+        "nasDelayFlights",
+        "securityDelayFlights",
+        "lateAircraftDelayFlights",
         "distanceMiles",
     ]
     compact_rows = []
@@ -159,10 +166,12 @@ def build(source: Path, output: Path, top_airports: int) -> None:
                 "onTimeRate": "1 - delayed arrivals (ArrDel15 = 1) / completed flights",
                 "averageDelayMinutes": "Arrival delay minutes / delayed arrivals, limited to completed flights with ArrDel15 = 1",
                 "cancellationRate": "Cancelled flights / reported flights",
+                "delayCauseAffectedFlights": "Flights with more than zero reported minutes for the corresponding BTS delay cause",
             },
             "preparationNotes": [
                 "Cancelled and diverted flights are excluded from arrival-performance denominators.",
                 "Blank delay-cause values are treated as zero because BTS reports causes only when applicable.",
+                "A flight is counted as affected by a cause when BTS reports more than zero minutes for that cause; one flight can appear under multiple causes.",
                 "All origin airports are retained as individually selectable categories.",
                 "Scheduled departure times are grouped into twelve two-hour local-time windows.",
             ],

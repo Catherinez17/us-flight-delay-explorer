@@ -27,6 +27,7 @@ const INDEX = {
 
 const DAYS = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const DAYS_SHORT = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DEPARTURE_WINDOWS = ["00-02", "02-04", "04-06", "06-08", "08-10", "10-12", "12-14", "14-16", "16-18", "18-20", "20-22", "22-00"];
 const MIN_RANKING_FLIGHTS = 20;
 const CAUSES = [
   ["Carrier", "carrierDelayMinutes", "carrierDelayFlights", "Within the airline's control, such as maintenance, crew, cleaning, baggage loading, or fueling."],
@@ -39,9 +40,8 @@ const CAUSES = [
 const FILTER_NAMES = {
   airline: "Carrier",
   origin: "Origin",
-  dayOfWeek: "Weekday",
+  dayOfWeek: "Day of week",
   departureWindow: "Departure",
-  heatmapSelection: "Time range",
 };
 
 const state = {
@@ -49,10 +49,9 @@ const state = {
   filters: {
     airline: null,
     origin: null,
-    dayOfWeek: null,
-    departureWindow: null,
+    dayOfWeek: [],
+    departureWindow: [],
   },
-  heatmapSelection: null,
   originLabelToCode: new Map(),
 };
 
@@ -128,13 +127,8 @@ function groupRows(rows, keyFn) {
 // dimension so the selected item remains visible alongside its peers.
 function matches(row, excluded = new Set()) {
   const f = state.filters;
-  const selection = state.heatmapSelection;
-  const dayMatches = excluded.has("dayOfWeek") || (selection
-    ? selection.days.includes(row[INDEX.dayOfWeek])
-    : !f.dayOfWeek || row[INDEX.dayOfWeek] === f.dayOfWeek);
-  const windowMatches = excluded.has("departureWindow") || (selection
-    ? selection.windows.includes(row[INDEX.departureWindow])
-    : !f.departureWindow || row[INDEX.departureWindow] === f.departureWindow);
+  const dayMatches = excluded.has("dayOfWeek") || !f.dayOfWeek.length || f.dayOfWeek.includes(row[INDEX.dayOfWeek]);
+  const windowMatches = excluded.has("departureWindow") || !f.departureWindow.length || f.departureWindow.includes(row[INDEX.departureWindow]);
   return (
     (excluded.has("airline") || !f.airline || row[INDEX.airline] === f.airline) &&
     (excluded.has("origin") || !f.origin || row[INDEX.origin] === f.origin) &&
@@ -149,24 +143,30 @@ function filteredRows(...exclude) {
 }
 
 function hasFilters() {
-  return Object.values(state.filters).some(Boolean) || Boolean(state.heatmapSelection);
+  return Object.values(state.filters).some((value) => Array.isArray(value) ? value.length > 0 : Boolean(value));
 }
 
 function toggleFilter(key, value) {
-  if (key === "dayOfWeek" || key === "departureWindow") state.heatmapSelection = null;
   state.filters[key] = state.filters[key] === value ? null : value;
   renderAll();
 }
 
 function setFilter(key, value) {
-  if (key === "dayOfWeek" || key === "departureWindow") state.heatmapSelection = null;
-  state.filters[key] = value;
+  if (key === "dayOfWeek" || key === "departureWindow") {
+    const values = Array.isArray(value) ? value : value == null || value === "" ? [] : [value];
+    const order = key === "dayOfWeek" ? [1, 2, 3, 4, 5, 6, 7] : DEPARTURE_WINDOWS;
+    state.filters[key] = [...new Set(values)].filter((item) => order.includes(item)).sort((a, b) => order.indexOf(a) - order.indexOf(b));
+  } else {
+    state.filters[key] = value;
+  }
   renderAll();
 }
 
 function resetFilters() {
-  for (const key of Object.keys(state.filters)) state.filters[key] = null;
-  state.heatmapSelection = null;
+  state.filters.airline = null;
+  state.filters.origin = null;
+  state.filters.dayOfWeek = [];
+  state.filters.departureWindow = [];
   renderAll();
 }
 
@@ -189,26 +189,11 @@ function windowLabel(value, compact = false) {
   return `${formatHour(start)}–${formatHour(end)}`;
 }
 
-function heatmapSelectionLabel(compact = false) {
-  const selection = state.heatmapSelection;
-  if (!selection) return "";
-  const firstDay = selection.days[0];
-  const lastDay = selection.days[selection.days.length - 1];
-  const dayNames = compact ? DAYS_SHORT : DAYS;
-  const dayText = firstDay === lastDay ? dayNames[firstDay] : `${dayNames[firstDay]}–${dayNames[lastDay]}`;
-  const firstWindow = selection.windows[0];
-  const lastWindow = selection.windows[selection.windows.length - 1];
-  const timeText = firstWindow === lastWindow
-    ? windowLabel(firstWindow, compact)
-    : windowLabel(`${firstWindow.split("-")[0]}-${lastWindow.split("-")[1]}`, compact);
-  return `${dayText} · ${timeText}`;
-}
-
 function filterLabel(key, value) {
   if (key === "airline") return `${value} · ${state.data.airlines[value] || value}`;
   if (key === "origin") return `${value} · ${state.data.origins[value] || value}`;
-  if (key === "dayOfWeek") return DAYS[value];
-  if (key === "departureWindow") return windowLabel(value);
+  if (key === "dayOfWeek") return value.map((day) => DAYS[day]).join(", ");
+  if (key === "departureWindow") return value.map((window) => windowLabel(window)).join(", ");
   return value;
 }
 
@@ -216,7 +201,6 @@ function initializeFilterControls() {
   const unique = (index) => [...new Set(state.data.rows.map((row) => row[index]))];
   const airlines = unique(INDEX.airline).sort();
   const origins = unique(INDEX.origin).sort();
-  const windows = unique(INDEX.departureWindow).filter((value) => value !== "Unknown").sort();
 
   const originOptions = document.querySelector("#origin-options");
   originOptions.innerHTML = origins.map((code) => {
@@ -249,21 +233,54 @@ function initializeFilterControls() {
     commitOrigin();
   });
 
-  const configs = [
-    ["#airline-filter", "airline", airlines, (value) => `${value} · ${state.data.airlines[value] || value}`],
-    ["#weekday-filter", "dayOfWeek", [1, 2, 3, 4, 5, 6, 7], (value) => DAYS[value]],
-    ["#window-filter", "departureWindow", windows, (value) => windowLabel(value)],
-  ];
+  const airlineSelect = document.querySelector("#airline-filter");
+  airlineSelect.innerHTML = `<option value="">All reporting carriers</option>${airlines.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(`${value} · ${state.data.airlines[value] || value}`)}</option>`).join("")}`;
+  airlineSelect.addEventListener("change", () => setFilter("airline", airlineSelect.value || null));
 
-  for (const [selector, key, values, labelFor] of configs) {
-    const select = document.querySelector(selector);
-    const allLabel = key === "airline" ? "All reporting carriers" : key === "dayOfWeek" ? "All weekdays" : "All times";
-    select.innerHTML = `<option value="">${allLabel}</option>${values.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(labelFor(value))}</option>`).join("")}`;
-    select.addEventListener("change", () => {
-      const value = select.value || null;
-      setFilter(key, key === "dayOfWeek" && value ? Number(value) : value);
+  // Weekdays and departure windows use checkbox menus so non-contiguous
+  // selections are possible. Heatmap clicks and brushing update these same arrays.
+  const buildMultiFilter = ({ key, detailsSelector, optionsSelector, values, labelFor, clearLabel }) => {
+    const details = document.querySelector(detailsSelector);
+    const options = document.querySelector(optionsSelector);
+    options.innerHTML = `
+      <button class="multi-filter-clear" type="button" aria-label="${escapeHtml(clearLabel)}">${escapeHtml(clearLabel)}</button>
+      ${values.map((value) => `<label class="multi-option"><input type="checkbox" value="${escapeHtml(value)}" aria-label="${escapeHtml(labelFor(value))}"><span>${escapeHtml(labelFor(value))}</span></label>`).join("")}`;
+    const commit = () => {
+      const selected = [...options.querySelectorAll('input[type="checkbox"]:checked')]
+        .map((input) => key === "dayOfWeek" ? Number(input.value) : input.value);
+      setFilter(key, selected);
+    };
+    options.addEventListener("change", commit);
+    options.querySelector(".multi-filter-clear").addEventListener("click", () => setFilter(key, []));
+    details.addEventListener("toggle", () => {
+      if (!details.open) return;
+      document.querySelectorAll(".multi-filter[open]").forEach((other) => {
+        if (other !== details) other.open = false;
+      });
     });
-  }
+  };
+
+  buildMultiFilter({
+    key: "dayOfWeek",
+    detailsSelector: "#weekday-filter",
+    optionsSelector: "#weekday-options",
+    values: [1, 2, 3, 4, 5, 6, 7],
+    labelFor: (value) => DAYS[value],
+    clearLabel: "All days",
+  });
+  buildMultiFilter({
+    key: "departureWindow",
+    detailsSelector: "#window-filter",
+    optionsSelector: "#window-options",
+    values: DEPARTURE_WINDOWS,
+    labelFor: (value) => windowLabel(value),
+    clearLabel: "All times",
+  });
+
+  document.addEventListener("pointerdown", (event) => {
+    if (event.target.closest(".multi-filter")) return;
+    document.querySelectorAll(".multi-filter[open]").forEach((details) => { details.open = false; });
+  });
 
   document.querySelector("#carrier-count").textContent = `(${airlines.length} in BTS)`;
   document.querySelector("#origin-count").textContent = `(${origins.length})`;
@@ -271,17 +288,27 @@ function initializeFilterControls() {
 }
 
 function renderFilterControls() {
-  const controls = {
-    airline: "#airline-filter",
-    dayOfWeek: "#weekday-filter",
-    departureWindow: "#window-filter",
+  const airlineSelect = document.querySelector("#airline-filter");
+  airlineSelect.value = state.filters.airline ?? "";
+  airlineSelect.classList.toggle("active-filter", Boolean(state.filters.airline));
+
+  const updateMultiFilter = ({ key, detailsSelector, optionsSelector, summarySelector, emptyLabel, selectedLabel }) => {
+    const selected = state.filters[key];
+    const details = document.querySelector(detailsSelector);
+    document.querySelectorAll(`${optionsSelector} input[type="checkbox"]`).forEach((input) => {
+      const value = key === "dayOfWeek" ? Number(input.value) : input.value;
+      input.checked = selected.includes(value);
+    });
+    document.querySelector(summarySelector).textContent = selected.length === 0
+      ? emptyLabel
+      : selected.length === 1
+        ? selectedLabel(selected[0])
+        : `${selected.length} selected`;
+    details.classList.toggle("active-filter", selected.length > 0);
   };
-  for (const [key, selector] of Object.entries(controls)) {
-    const select = document.querySelector(selector);
-    const replacedByRange = Boolean(state.heatmapSelection) && (key === "dayOfWeek" || key === "departureWindow");
-    select.value = replacedByRange ? "" : state.filters[key] ?? "";
-    select.classList.toggle("active-filter", !replacedByRange && Boolean(state.filters[key]));
-  }
+
+  updateMultiFilter({ key: "dayOfWeek", detailsSelector: "#weekday-filter", optionsSelector: "#weekday-options", summarySelector: "#weekday-summary", emptyLabel: "All days", selectedLabel: (value) => DAYS[value] });
+  updateMultiFilter({ key: "departureWindow", detailsSelector: "#window-filter", optionsSelector: "#window-options", summarySelector: "#window-summary", emptyLabel: "All times", selectedLabel: (value) => windowLabel(value) });
 
   const originInput = document.querySelector("#origin-filter");
   originInput.value = state.filters.origin
@@ -294,20 +321,16 @@ function renderFilters() {
   const container = document.querySelector("#filter-chips");
   const active = [];
   for (const key of ["airline", "origin", "dayOfWeek", "departureWindow"]) {
-    if (state.filters[key]) active.push([key, filterLabel(key, state.filters[key])]);
+    const value = state.filters[key];
+    if (Array.isArray(value) ? value.length : value) active.push([key, filterLabel(key, value)]);
   }
-  if (state.heatmapSelection) active.push(["heatmapSelection", heatmapSelectionLabel()]);
   container.innerHTML = active.length
     ? active.map(([key, value]) => `<button class="filter-chip" type="button" data-key="${key}" aria-label="Remove ${FILTER_NAMES[key]} filter: ${escapeHtml(value)}"><strong>${FILTER_NAMES[key]}:</strong>&nbsp;${escapeHtml(value)}</button>`).join("")
     : "";
   container.querySelectorAll(".filter-chip").forEach((chip) => {
     chip.addEventListener("click", () => {
-      if (chip.dataset.key === "heatmapSelection") {
-        state.heatmapSelection = null;
-        renderAll();
-      } else {
-        setFilter(chip.dataset.key, null);
-      }
+      const key = chip.dataset.key;
+      setFilter(key, key === "dayOfWeek" || key === "departureWindow" ? [] : null);
     });
   });
   document.querySelector("#reset-button").disabled = active.length === 0;
@@ -317,11 +340,11 @@ function scopeItems(excluded = new Set()) {
   const items = [];
   if (!excluded.has("airline") && state.filters.airline) items.push(state.filters.airline);
   if (!excluded.has("origin") && state.filters.origin) items.push(state.filters.origin);
-  if (state.heatmapSelection) {
-    if (!excluded.has("dayOfWeek") && !excluded.has("departureWindow")) items.push(heatmapSelectionLabel(true));
-  } else {
-    if (!excluded.has("dayOfWeek") && state.filters.dayOfWeek) items.push(DAYS_SHORT[state.filters.dayOfWeek]);
-    if (!excluded.has("departureWindow") && state.filters.departureWindow) items.push(windowLabel(state.filters.departureWindow, true));
+  if (!excluded.has("dayOfWeek") && state.filters.dayOfWeek.length) {
+    items.push(state.filters.dayOfWeek.map((day) => DAYS_SHORT[day]).join(", "));
+  }
+  if (!excluded.has("departureWindow") && state.filters.departureWindow.length) {
+    items.push(state.filters.departureWindow.map((window) => windowLabel(window, true)).join(", "));
   }
   return items;
 }
@@ -423,11 +446,7 @@ function renderTimeline() {
   const path = points.map((point, index) => `${index ? "L" : "M"}${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
   const ticks = [minY, (minY + maxY) / 2, maxY];
   const average = onTimeRate(summarize(filteredRows()));
-  const selectedWeekdayCount = state.heatmapSelection
-    ? state.heatmapSelection.days.length
-    : state.filters.dayOfWeek
-      ? 1
-      : 0;
+  const selectedWeekdayCount = state.filters.dayOfWeek.length;
   const showEveryAvailableDate = selectedWeekdayCount === 1;
   const dateTicks = showEveryAvailableDate
     ? points.map(({ date, x: tickX }) => ({ date, x: tickX }))
@@ -643,63 +662,98 @@ function renderHeatmap() {
   const container = document.querySelector("#heatmap-chart");
   const rows = filteredRows("dayOfWeek", "departureWindow");
   const grouped = groupRows(rows, (row) => `${row[INDEX.dayOfWeek]}|${row[INDEX.departureWindow]}`);
-  const windows = [...new Set(rows.map((row) => row[INDEX.departureWindow]).filter((value) => value !== "Unknown"))].sort();
+  const windows = DEPARTURE_WINDOWS;
   const cells = [];
   for (let day = 1; day <= 7; day += 1) {
     for (const window of windows) {
       const metrics = grouped.get(`${day}|${window}`) || emptyMetrics();
-      cells.push({ day, window, metrics, value: rate(metrics.delayed15, metrics.completed) });
+      cells.push({
+        day,
+        window,
+        metrics,
+        hasData: metrics.flights > 0,
+        hasRate: metrics.completed > 0,
+        value: rate(metrics.delayed15, metrics.completed),
+      });
     }
   }
-  const values = cells.filter((cell) => cell.metrics.completed).map((cell) => cell.value);
+  const values = cells.filter((cell) => cell.hasRate).map((cell) => cell.value);
   const min = values.length ? Math.min(...values) : 0;
-  const max = values.length ? Math.max(...values) : 1;
+  const max = values.length ? Math.max(...values) : 0;
   const width = 760;
   const height = 268;
   const margin = { top: 54, right: 18, bottom: 12, left: 70 };
-  const cellW = (width - margin.left - margin.right) / Math.max(1, windows.length);
+  const cellW = (width - margin.left - margin.right) / windows.length;
   const cellH = (height - margin.top - margin.bottom) / 7;
-  const rangeSelection = state.heatmapSelection;
-  const inRangeSelection = (day, window) => Boolean(
-    rangeSelection && rangeSelection.days.includes(day) && rangeSelection.windows.includes(window)
+  const selectedDays = state.filters.dayOfWeek;
+  const selectedWindows = state.filters.departureWindow;
+  const hasTemporalSelection = selectedDays.length > 0 || selectedWindows.length > 0;
+  const isSelected = (day, window) => (
+    (!selectedDays.length || selectedDays.includes(day)) &&
+    (!selectedWindows.length || selectedWindows.includes(window))
   );
+  const maximumCandidates = cells.filter((cell) => (
+    cell.hasRate && (!hasTemporalSelection || isSelected(cell.day, cell.window))
+  ));
+  const selectionMaximum = maximumCandidates.length
+    ? Math.max(...maximumCandidates.map((cell) => cell.value))
+    : null;
+  const selectionMinimum = maximumCandidates.length
+    ? Math.min(...maximumCandidates.map((cell) => cell.value))
+    : null;
+  const firstMaximumIndex = selectionMaximum === null
+    ? -1
+    : cells.findIndex((cell) => maximumCandidates.includes(cell) && Math.abs(cell.value - selectionMaximum) < 1e-9);
+  const firstMinimumIndex = selectionMinimum === null
+    ? -1
+    : cells.findIndex((cell) => maximumCandidates.includes(cell) && Math.abs(cell.value - selectionMinimum) < 1e-9);
+  const extremaAreEqual = selectionMinimum !== null && selectionMaximum !== null
+    && Math.abs(selectionMinimum - selectionMaximum) < 1e-9;
+  const extremeUsesDarkText = (value) => max === min || (value - min) / (max - min) < 0.55;
+
+  document.querySelector("#heat-legend-min").textContent = "Lower delay rate";
+  document.querySelector("#heat-legend-max").textContent = "Higher delay rate";
+  const legendMarker = document.querySelector("#heat-legend-marker");
+  legendMarker.hidden = true;
 
   container.innerHTML = `
-    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Heatmap of delay rate by weekday and two-hour scheduled departure window. Click a cell for one time block or drag across cells to filter a continuous range.">
+    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Heatmap of delay rate by weekday and two-hour scheduled departure window.">
+      <defs>
+        <pattern id="no-data-pattern" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <rect width="7" height="7" fill="#f4f6f8"></rect>
+          <line x1="0" y1="0" x2="0" y2="7" stroke="#a7b2bd" stroke-width="2"></line>
+        </pattern>
+      </defs>
       <text class="heat-axis-title" x="${margin.left + (width - margin.left - margin.right) / 2}" y="13" text-anchor="middle">Scheduled departure time (local)</text>
       ${windows.map((window, index) => {
-        const muted = rangeSelection
-          ? !rangeSelection.windows.includes(window)
-          : state.filters.departureWindow && state.filters.departureWindow !== window;
-        const active = rangeSelection
-          ? rangeSelection.windows.includes(window)
-          : state.filters.departureWindow === window;
-        return `<text x="${margin.left + index * cellW + cellW / 2}" y="${margin.top - 12}" text-anchor="middle" fill="${muted ? "#aeb8c2" : active ? "#8d4109" : "#43576b"}" font-weight="${active ? 800 : 400}">${escapeHtml(windowLabel(window, true))}</text>`;
+        const active = selectedWindows.includes(window);
+        return `<text x="${margin.left + index * cellW + cellW / 2}" y="${margin.top - 12}" text-anchor="middle" fill="${active ? "#a64b0a" : "#43576b"}" font-weight="${active ? 800 : 400}">${escapeHtml(windowLabel(window, true))}</text>`;
       }).join("")}
       ${DAYS.slice(1).map((day, index) => {
         const dayNumber = index + 1;
-        const muted = rangeSelection
-          ? !rangeSelection.days.includes(dayNumber)
-          : state.filters.dayOfWeek && state.filters.dayOfWeek !== dayNumber;
-        const active = rangeSelection
-          ? rangeSelection.days.includes(dayNumber)
-          : state.filters.dayOfWeek === dayNumber;
-        return `<text x="${margin.left - 12}" y="${margin.top + index * cellH + cellH / 2 + 4}" text-anchor="end" fill="${muted ? "#aeb8c2" : active ? "#8d4109" : "#43576b"}" font-weight="${active ? 800 : 400}">${day}</text>`;
+        const active = selectedDays.includes(dayNumber);
+        return `<text x="${margin.left - 12}" y="${margin.top + index * cellH + cellH / 2 + 4}" text-anchor="end" fill="${active ? "#a64b0a" : "#43576b"}" font-weight="${active ? 800 : 400}">${day}</text>`;
       }).join("")}
-      ${cells.map((cell) => {
+      ${cells.map((cell, cellIndex) => {
         const x = margin.left + windows.indexOf(cell.window) * cellW;
         const y = margin.top + (cell.day - 1) * cellH;
-        const selected = rangeSelection
-          ? inRangeSelection(cell.day, cell.window)
-          : state.filters.dayOfWeek === cell.day && state.filters.departureWindow === cell.window;
-        const mutedDay = rangeSelection
-          ? !rangeSelection.days.includes(cell.day)
-          : state.filters.dayOfWeek && state.filters.dayOfWeek !== cell.day;
-        const mutedWindow = rangeSelection
-          ? !rangeSelection.windows.includes(cell.window)
-          : state.filters.departureWindow && state.filters.departureWindow !== cell.window;
-        const muted = rangeSelection ? !selected : mutedDay || mutedWindow;
-        return `<rect class="chart-target ${selected ? "selected-mark" : ""} ${muted ? "muted-heat-cell" : ""}" tabindex="0" role="button" aria-label="${DAYS[cell.day]}, ${escapeHtml(windowLabel(cell.window))}: ${cell.value.toFixed(1)} percent delayed" data-day="${cell.day}" data-window="${escapeHtml(cell.window)}" data-value="${cell.value.toFixed(2)}" data-flights="${cell.metrics.flights}" x="${x + 2}" y="${y + 2}" width="${Math.max(1, cellW - 4)}" height="${Math.max(1, cellH - 4)}" rx="4" fill="${heatColor(cell.value, min, max)}"></rect>`;
+        const selected = hasTemporalSelection && isSelected(cell.day, cell.window);
+        const ariaValue = !cell.hasData
+          ? "no reported flights"
+          : cell.hasRate
+            ? `${cell.value.toFixed(1)} percent delayed`
+            : "no completed arrivals";
+        const fill = cell.hasRate ? heatColor(cell.value, min, max) : "url(#no-data-pattern)";
+        let extremeLabel = "";
+        if (!hasTemporalSelection && extremaAreEqual && cellIndex === firstMinimumIndex) {
+          extremeLabel = `Min/Max ${selectionMinimum.toFixed(1)}%`;
+        } else if (!hasTemporalSelection && cellIndex === firstMinimumIndex) {
+          extremeLabel = `Min ${selectionMinimum.toFixed(1)}%`;
+        } else if (!hasTemporalSelection && cellIndex === firstMaximumIndex) {
+          extremeLabel = `Max ${selectionMaximum.toFixed(1)}%`;
+        }
+        const labelUsesDarkText = extremeLabel && extremeUsesDarkText(cell.value);
+        return `<rect class="chart-target ${selected ? "selected-mark" : ""} ${!cell.hasData ? "no-data-heat-cell" : ""}" tabindex="0" role="button" aria-label="${DAYS[cell.day]}, ${escapeHtml(windowLabel(cell.window))}: ${ariaValue}" data-day="${cell.day}" data-window="${escapeHtml(cell.window)}" data-value="${cell.hasRate ? cell.value.toFixed(2) : ""}" data-has-rate="${cell.hasRate}" data-flights="${cell.metrics.flights}" x="${x + 2}" y="${y + 2}" width="${Math.max(1, cellW - 4)}" height="${Math.max(1, cellH - 4)}" rx="4" fill="${fill}"></rect>${extremeLabel ? `<text class="extreme-heat-label ${labelUsesDarkText ? "on-light-cell" : ""}" x="${x + cellW / 2}" y="${y + cellH / 2 + 3}" text-anchor="middle">${extremeLabel}</text>` : ""}`;
       }).join("")}
     </svg>`;
 
@@ -709,28 +763,52 @@ function renderHeatmap() {
     ({ day, window }) => {
       if (suppressClick) return;
       const numericDay = Number(day);
-      const alreadySelected = state.filters.dayOfWeek === numericDay && state.filters.departureWindow === window;
-      state.heatmapSelection = null;
-      state.filters.dayOfWeek = alreadySelected ? null : numericDay;
-      state.filters.departureWindow = alreadySelected ? null : window;
+      const alreadySelected = state.filters.dayOfWeek.length === 1 && state.filters.dayOfWeek[0] === numericDay && state.filters.departureWindow.length === 1 && state.filters.departureWindow[0] === window;
+      state.filters.dayOfWeek = alreadySelected ? [] : [numericDay];
+      state.filters.departureWindow = alreadySelected ? [] : [window];
       renderAll();
     },
     ({ day, window }) => {
       const cell = cells.find((entry) => entry.day === Number(day) && entry.window === window);
+      if (!cell.hasData) {
+        return {
+          title: `${DAYS[Number(day)]} · ${windowLabel(window)}`,
+          lines: ["No reported flights"],
+        };
+      }
       const averageDelay = cell.metrics.delayed15
         ? cell.metrics.delayedArrivalDelayMinutes / cell.metrics.delayed15
         : 0;
+      const rateLines = cell.hasRate
+        ? [`${onTimeRate(cell.metrics).toFixed(1)}% on time`, `${cell.value.toFixed(1)}% delayed ≥15 min`]
+        : ["No completed arrivals"];
       return {
         title: `${DAYS[Number(day)]} · ${windowLabel(window)}`,
         lines: [
           `${numberFormat.format(cell.metrics.flights)} reported flights`,
-          `${onTimeRate(cell.metrics).toFixed(1)}% on time`,
-          `${cell.value.toFixed(1)}% delayed ≥15 min`,
-          `${averageDelay.toFixed(1)} avg delay min among delayed arrivals`,
+          ...rateLines,
+          ...(cell.hasRate ? [`${averageDelay.toFixed(1)} avg delay min among delayed arrivals`] : []),
         ],
       };
     }
   );
+
+  container.querySelectorAll("rect.chart-target").forEach((target) => {
+    const updateLegendMarker = () => {
+      if (target.dataset.hasRate !== "true" || !values.length) {
+        legendMarker.hidden = true;
+        return;
+      }
+      const value = Number(target.dataset.value);
+      const position = max === min ? 50 : 100 * (value - min) / (max - min);
+      legendMarker.style.left = `${Math.max(0, Math.min(100, position))}%`;
+      legendMarker.hidden = false;
+    };
+    target.addEventListener("pointerenter", updateLegendMarker);
+    target.addEventListener("focus", updateLegendMarker);
+    target.addEventListener("pointerleave", () => { legendMarker.hidden = true; });
+    target.addEventListener("blur", () => { legendMarker.hidden = true; });
+  });
 
   const svg = container.querySelector("svg");
 
@@ -793,12 +871,8 @@ function renderHeatmap() {
     const minWindow = Math.min(completedBrush.start.windowIndex, completedBrush.end.windowIndex);
     const maxWindow = Math.max(completedBrush.start.windowIndex, completedBrush.end.windowIndex);
     suppressClick = true;
-    state.filters.dayOfWeek = null;
-    state.filters.departureWindow = null;
-    state.heatmapSelection = {
-      days: Array.from({ length: maxDay - minDay + 1 }, (_, index) => minDay + index),
-      windows: windows.slice(minWindow, maxWindow + 1),
-    };
+    state.filters.dayOfWeek = Array.from({ length: maxDay - minDay + 1 }, (_, index) => minDay + index);
+    state.filters.departureWindow = windows.slice(minWindow, maxWindow + 1);
     renderAll();
   });
   svg.addEventListener("pointercancel", () => {
@@ -893,8 +967,20 @@ function registerWebMcp() {
       properties: {
         airline: { type: ["string", "null"] },
         origin: { type: ["string", "null"] },
-        dayOfWeek: { type: ["integer", "null"], minimum: 1, maximum: 7 },
-        departureWindow: { type: ["string", "null"] },
+        dayOfWeek: {
+          anyOf: [
+            { type: "integer", minimum: 1, maximum: 7 },
+            { type: "array", items: { type: "integer", minimum: 1, maximum: 7 }, uniqueItems: true },
+            { type: "null" },
+          ],
+        },
+        departureWindow: {
+          anyOf: [
+            { type: "string" },
+            { type: "array", items: { type: "string" }, uniqueItems: true },
+            { type: "null" },
+          ],
+        },
       },
       additionalProperties: false,
     },
@@ -902,9 +988,14 @@ function registerWebMcp() {
     execute(input) {
       for (const [key, value] of Object.entries(input || {})) {
         if (!(key in state.filters)) throw new Error(`Unknown filter: ${key}`);
-        if (value !== null && !validValues[key].has(value)) throw new Error(`Invalid ${key} value: ${value}`);
-        if (key === "dayOfWeek" || key === "departureWindow") state.heatmapSelection = null;
-        state.filters[key] = value;
+        const values = Array.isArray(value) ? value : value === null ? [] : [value];
+        if (values.some((item) => !validValues[key].has(item))) throw new Error(`Invalid ${key} value: ${value}`);
+        if (key === "dayOfWeek" || key === "departureWindow") {
+          const order = key === "dayOfWeek" ? [1, 2, 3, 4, 5, 6, 7] : DEPARTURE_WINDOWS;
+          state.filters[key] = values.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+        } else {
+          state.filters[key] = value;
+        }
       }
       renderAll();
       return { filters: { ...state.filters } };
@@ -935,7 +1026,6 @@ async function init() {
       <p><strong>Dataset.</strong> ${escapeHtml(state.data.meta.period)} BTS Reporting Carrier On-Time Performance data: ${numberFormat.format(state.data.meta.reportedFlights)} reported flights from ${state.data.meta.reportingCarrierCount} reporting carriers and ${state.data.meta.originCount} origin airports.</p>
       <p><strong>Metrics.</strong> An arrival is on time if it is less than 15 minutes late. Average delay is calculated only for arrivals delayed by at least 15 minutes. Departure windows use scheduled local departure time.</p>
       <p><strong>Rankings.</strong> Carrier and airport rankings require at least ${MIN_RANKING_FLIGHTS} reported flights within the current selection. Items below the threshold are excluded from formal ranks but may be shown as small-sample references.</p>
-      <p><strong>Delay causes.</strong> An affected flight has more than zero attributed minutes recorded for that cause.</p>
     `;
     document.querySelector("#reset-button").addEventListener("click", resetFilters);
     initializeFilterControls();
