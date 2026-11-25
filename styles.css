@@ -342,14 +342,14 @@ h1 {
 }
 
 .filter-chip {
-  max-width: min(100%, 34rem);
+  max-width: 100%;
   border: 1px solid #f0b27e;
   background: var(--orange-pale);
   color: #753506;
   cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  text-align: left;
+  white-space: normal;
 }
 
 .filter-chip::after {

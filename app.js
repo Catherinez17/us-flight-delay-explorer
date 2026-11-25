@@ -202,8 +202,8 @@ function windowLabel(value, compact = false) {
 function filterLabel(key, value) {
   if (key === "airline") return `${value} · ${state.data.airlines[value] || value}`;
   if (key === "origin") return `${value} · ${state.data.origins[value] || value}`;
-  if (key === "dayOfWeek") return value.length <= 3 ? value.map((day) => DAYS[day]).join(", ") : `${value.length} days`;
-  if (key === "departureWindow") return value.length <= 3 ? value.map((window) => windowLabel(window)).join(", ") : `${value.length} time windows`;
+  if (key === "dayOfWeek") return value.map((day) => DAYS[day]).join(", ");
+  if (key === "departureWindow") return value.map((window) => windowLabel(window)).join(", ");
   return value;
 }
 
