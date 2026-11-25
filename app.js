@@ -27,6 +27,7 @@ const INDEX = {
 
 const DAYS = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const DAYS_SHORT = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DAY_VALUES = [1, 2, 3, 4, 5, 6, 7];
 const DEPARTURE_WINDOWS = ["00-02", "02-04", "04-06", "06-08", "08-10", "10-12", "12-14", "14-16", "16-18", "18-20", "20-22", "22-00"];
 const MIN_RANKING_FLIGHTS = 20;
 const CAUSES = [
@@ -151,11 +152,20 @@ function toggleFilter(key, value) {
   renderAll();
 }
 
+// Selecting every member of a dimension is equivalent to applying no filter.
+// Normalizing that state keeps the controls, chips, scopes, and heatmap styling concise.
+function normalizeMultiFilter(key, value) {
+  const values = Array.isArray(value) ? value : value == null || value === "" ? [] : [value];
+  const order = key === "dayOfWeek" ? DAY_VALUES : DEPARTURE_WINDOWS;
+  const normalized = [...new Set(values)]
+    .filter((item) => order.includes(item))
+    .sort((a, b) => order.indexOf(a) - order.indexOf(b));
+  return normalized.length === order.length ? [] : normalized;
+}
+
 function setFilter(key, value) {
   if (key === "dayOfWeek" || key === "departureWindow") {
-    const values = Array.isArray(value) ? value : value == null || value === "" ? [] : [value];
-    const order = key === "dayOfWeek" ? [1, 2, 3, 4, 5, 6, 7] : DEPARTURE_WINDOWS;
-    state.filters[key] = [...new Set(values)].filter((item) => order.includes(item)).sort((a, b) => order.indexOf(a) - order.indexOf(b));
+    state.filters[key] = normalizeMultiFilter(key, value);
   } else {
     state.filters[key] = value;
   }
@@ -192,8 +202,8 @@ function windowLabel(value, compact = false) {
 function filterLabel(key, value) {
   if (key === "airline") return `${value} · ${state.data.airlines[value] || value}`;
   if (key === "origin") return `${value} · ${state.data.origins[value] || value}`;
-  if (key === "dayOfWeek") return value.map((day) => DAYS[day]).join(", ");
-  if (key === "departureWindow") return value.map((window) => windowLabel(window)).join(", ");
+  if (key === "dayOfWeek") return value.length <= 3 ? value.map((day) => DAYS[day]).join(", ") : `${value.length} days`;
+  if (key === "departureWindow") return value.length <= 3 ? value.map((window) => windowLabel(window)).join(", ") : `${value.length} time windows`;
   return value;
 }
 
@@ -264,7 +274,7 @@ function initializeFilterControls() {
     key: "dayOfWeek",
     detailsSelector: "#weekday-filter",
     optionsSelector: "#weekday-options",
-    values: [1, 2, 3, 4, 5, 6, 7],
+    values: DAY_VALUES,
     labelFor: (value) => DAYS[value],
     clearLabel: "All days",
   });
@@ -341,10 +351,14 @@ function scopeItems(excluded = new Set()) {
   if (!excluded.has("airline") && state.filters.airline) items.push(state.filters.airline);
   if (!excluded.has("origin") && state.filters.origin) items.push(state.filters.origin);
   if (!excluded.has("dayOfWeek") && state.filters.dayOfWeek.length) {
-    items.push(state.filters.dayOfWeek.map((day) => DAYS_SHORT[day]).join(", "));
+    items.push(state.filters.dayOfWeek.length <= 3
+      ? state.filters.dayOfWeek.map((day) => DAYS_SHORT[day]).join(", ")
+      : `${state.filters.dayOfWeek.length} days`);
   }
   if (!excluded.has("departureWindow") && state.filters.departureWindow.length) {
-    items.push(state.filters.departureWindow.map((window) => windowLabel(window, true)).join(", "));
+    items.push(state.filters.departureWindow.length <= 3
+      ? state.filters.departureWindow.map((window) => windowLabel(window, true)).join(", ")
+      : `${state.filters.departureWindow.length} time windows`);
   }
   return items;
 }
@@ -871,8 +885,8 @@ function renderHeatmap() {
     const minWindow = Math.min(completedBrush.start.windowIndex, completedBrush.end.windowIndex);
     const maxWindow = Math.max(completedBrush.start.windowIndex, completedBrush.end.windowIndex);
     suppressClick = true;
-    state.filters.dayOfWeek = Array.from({ length: maxDay - minDay + 1 }, (_, index) => minDay + index);
-    state.filters.departureWindow = windows.slice(minWindow, maxWindow + 1);
+    state.filters.dayOfWeek = normalizeMultiFilter("dayOfWeek", Array.from({ length: maxDay - minDay + 1 }, (_, index) => minDay + index));
+    state.filters.departureWindow = normalizeMultiFilter("departureWindow", windows.slice(minWindow, maxWindow + 1));
     renderAll();
   });
   svg.addEventListener("pointercancel", () => {
@@ -954,7 +968,7 @@ function registerWebMcp() {
   const validValues = {
     airline: new Set(state.data.rows.map((row) => row[INDEX.airline])),
     origin: new Set(state.data.rows.map((row) => row[INDEX.origin])),
-    dayOfWeek: new Set([1, 2, 3, 4, 5, 6, 7]),
+    dayOfWeek: new Set(DAY_VALUES),
     departureWindow: new Set(state.data.rows.map((row) => row[INDEX.departureWindow])),
   };
 
@@ -991,8 +1005,7 @@ function registerWebMcp() {
         const values = Array.isArray(value) ? value : value === null ? [] : [value];
         if (values.some((item) => !validValues[key].has(item))) throw new Error(`Invalid ${key} value: ${value}`);
         if (key === "dayOfWeek" || key === "departureWindow") {
-          const order = key === "dayOfWeek" ? [1, 2, 3, 4, 5, 6, 7] : DEPARTURE_WINDOWS;
-          state.filters[key] = values.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+          state.filters[key] = normalizeMultiFilter(key, values);
         } else {
           state.filters[key] = value;
         }
